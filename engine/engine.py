@@ -22,9 +22,13 @@ CONFIG = os.path.join(ROOT, "config")
 sys.path.insert(0, ROOT)
 
 
-def cmd_build(_a):
-    import build_site
-    build_site.build()
+def cmd_build(a):
+    # build.py is the garage-door renderer (JSON content under content/<slug>/).
+    # This used to call build_site.build() -- the porta-potty markdown renderer --
+    # which rmtree'd all of dist/ and then rebuilt nothing, because no domain has
+    # the <domain>/content/**/*.md layout that renderer expects.
+    import build
+    build.build(getattr(a, "domains", None) or None)
     print("Built -> dist/")
 
 
@@ -159,31 +163,26 @@ def cmd_bulk(a):
     Idempotent: skips domains already registered. Content dirs are still added later.
     Auto-assigns layout variations to ensure each site looks unique."""
     import csv
-    try:
-        from layouts import get_layout_for_site
-    except ImportError:
-        print("! layouts.py not found; layout variations will not be assigned")
-        get_layout_for_site = None
-    
+    # layouts.py's get_layout_for_site() used to be called here and its result
+    # appended to config/layouts.json under a "layouts" key. That key does not
+    # exist in that file -- it is a flat {name: axes} map -- so the append raised
+    # KeyError on the first genuinely new domain, and had it succeeded it would
+    # have written a hybrid that build.py's layouts.get(site["layout"]) name
+    # lookup cannot read, silently collapsing every site to DEFAULT_LAYOUT.
+    # build.py never consumes per-domain layout assignments anyway; the layout is
+    # the round-robin name stored on each site below. Integration removed.
+
     sheet = a.sheet or os.path.join(os.path.dirname(ROOT), "domains.csv")
     if not os.path.exists(sheet):
         print(f"! sheet not found: {sheet}"); return
     themes_path = os.path.join(CONFIG, "themes.json")
     sites_path = os.path.join(CONFIG, "sites.json")
-    layouts_path = os.path.join(CONFIG, "layouts.json")
     
     themes = json.load(open(themes_path, encoding="utf-8"))
     data = json.load(open(sites_path, encoding="utf-8"))
     sites = data["sites"]
     have = {s["domain"] for s in sites}
     port = max([s.get("port", 0) for s in sites] + [8200])
-    
-    # Load or initialize layouts file
-    if os.path.exists(layouts_path) and get_layout_for_site:
-        layouts = json.load(open(layouts_path, encoding="utf-8"))
-    else:
-        layouts = {"layouts": []}
-    layout_domains = {l["domain"] for l in layouts.get("layouts", [])}
     
     rows = [r for r in csv.DictReader(open(sheet, encoding="utf-8-sig"))
             if (r.get("Domain (Purchased)") or "").strip()]
@@ -205,9 +204,6 @@ def cmd_bulk(a):
         
         # Assign unique layout variation
         site_index = len(sites)
-        layout_assignment = None
-        if get_layout_for_site and domain not in layout_domains:
-            layout_assignment = get_layout_for_site(site_index)
         
         sites.append({
             "domain": domain, "city": city, "st": st,
@@ -216,27 +212,21 @@ def cmd_bulk(a):
             "phone": "", "theme": theme, "layout": LAYOUTS[site_index % len(LAYOUTS)],
             "port": port,
         })
-        
-        # Store layout variation
-        if get_layout_for_site and domain not in layout_domains and layout_assignment:
-            layouts["layouts"].append({"domain": domain, **layout_assignment})
-        
+
         have.add(domain); added += 1
     json.dump(themes, open(themes_path, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
     json.dump(data, open(sites_path, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
-    if get_layout_for_site and layouts.get("layouts"):
-        json.dump(layouts, open(layouts_path, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
-    
     print(f"Registered {added} new sites (skipped {skipped} already-present); total now {len(sites)}.")
-    if get_layout_for_site:
-        print(f"Auto-assigned {added} unique layout variations (see config/layouts.json)")
     print("Each site builds once content/<city>-<st>/ exists (build.py skips sites with no content).")
 
 
 def main():
     ap = argparse.ArgumentParser(description="Porta Pros site engine")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("build").set_defaults(fn=cmd_build)
+    b = sub.add_parser("build")
+    b.add_argument("domains", nargs="*",
+                   help="build only these domains (default: every domain with content)")
+    b.set_defaults(fn=cmd_build)
     sub.add_parser("serve").set_defaults(fn=cmd_serve)
     sub.add_parser("logos").set_defaults(fn=cmd_logos)
     sub.add_parser("audit").set_defaults(fn=cmd_audit)

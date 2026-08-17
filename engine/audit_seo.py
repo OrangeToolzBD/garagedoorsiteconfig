@@ -42,7 +42,12 @@ def audit_page(fp, domain):
             objs = data if isinstance(data, list) else data.get("@graph", [data])
             for o in objs:
                 if isinstance(o, dict) and o.get("@type"):
-                    types.append(o["@type"])
+                    # "@type" is a list on nodes that declare several types (the
+                    # business node is both LocalBusiness and
+                    # HomeAndConstructionBusiness). Appending it raw made the
+                    # set() in main() raise "unhashable type: 'list'".
+                    ty = o["@type"]
+                    types.extend(ty if isinstance(ty, list) else [ty])
         except Exception:
             types.append("PARSE_ERROR")
     internal = len(re.findall(r'href="/[^"]*"', h))

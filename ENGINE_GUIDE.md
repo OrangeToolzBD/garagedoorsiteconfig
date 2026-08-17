@@ -188,6 +188,196 @@ JSON-LD `@graph`.
 `templates.py`) can replace the default "garage" design per-site via a `"template"`
 field in that site's `sites.json` entry.
 
+### Sticky mobile/tablet call bar
+
+Every page renders a fixed bottom bar, shown at `≤1120px` — exactly the width where
+the header's "Free Quote" button hides. Above that the header CTA is always on
+screen; below it, the top-bar phone link scrolls away and the burger was the only
+thing left.
+
+The call action is always present and always primary; the secondary slot is one of
+three digest-picked layouts: `call` (full-width), `split` (Call + Free Quote), or
+`icon` (Call + compact icon button). The bar is **suppressed entirely** on sites with
+no phone on file and on `/request-a-quote/` itself, is hidden from print, and sits at
+`z-index:55` so the open mobile nav panel covers it.
+
+`--callbar-h` drives both the bar height and the space reserved for it on `.gfooter`,
+so they can't drift. The reservation is on the footer, not `body`: `body` is white and
+`.gfooter` is `#0e141b`, so any mismatch would paint a white strip under the dark
+footer. Verified at 320–430px: no clipping, no horizontal scroll, footer clears by
+24px. Markup is `call_bar()` in `build.py`; CSS is the `.callbar` block in `GD_CSS`.
+
+### Randomised CTA styles
+
+`BUTTON_STYLES` in `build.py` holds 6 CTA presets — `solid` (the historical default),
+`glow`, `press`, `edge`, `raised`, `cut` — harvested from the four designs already in
+the repo so the vocabulary stays coherent. Each owns radius, padding, border weight,
+type treatment and the primary/outline fills, rendered against the site's own theme
+tokens, so two sites sharing a preset but not a theme still differ.
+
+Picked per-domain by digest, overridable with a `"buttons"` field in `sites.json`
+(unknown names warn and fall back to `solid`). Combined with the 6 layouts this takes
+the design space from 6 looks to **all 36 layout × CTA combinations**, spread 163–171
+per preset across the 1000 domains.
+
+> **`BUTTON_STYLES` order is an append-only contract.** Selection is
+> `digest % len(BUTTON_STYLES)`, so inserting, removing or reordering a preset
+> re-rolls the assignment for nearly every domain. Add new presets at the end only.
+
+Two implementation notes that are easy to trip over:
+
+- Uses `_hash_idx()` (blake2s), **not** `_stable_idx()`. The latter sums character
+  codes, so salting it only shifts the sum by a constant and every axis derived from
+  one domain moves in lockstep — measured, three 4-option axes produced **4 of 64**
+  combinations. `_stable_idx` also drives photo selection and is reached by
+  `templates.py` as `H._stable_idx`, so it was left alone.
+- `load_config` builds each site dict from an explicit whitelist. A new `sites.json`
+  key is **silently dropped** unless it is added there too.
+
+The bar takes the preset's fill and radius but deliberately **not** its type: the
+uppercase + `.18em`-tracked presets push the two labels past 420px, which overflows a
+390px phone.
+
+The generated block also supplies the engine's only `:focus-visible` styles — the
+shared design system defines no focus state at all, so keyboard users previously got a
+UA ring that is invisible on a filled accent button.
+
+Both features apply to the default `garage` design (998 of 1001 sites). The three
+alt-template sites are unaffected and byte-identical: `templates.py`'s `REGISTRY`
+returns a frozen CSS string that ignores the site, and those renderers never call
+`footer()`.
+
+### Below-hero differentiation
+
+A review found the hero fine but everything below it near-identical across sites.
+Measured with `measure_similarity.py` (see below), that was correct: below-hero text
+was **78.7% similar at the median**, two sites were **99.6% identical** after
+normalising the city name, and of ~30 copy strings below the hero **exactly 2 varied**
+— both on "has a phone" vs "doesn't".
+
+Four things changed:
+
+1. **Homepage `sections` are rendered** (`home_sections()`). `home_page()` read only
+   h1/title/meta/faq and dropped the `sections` array, so **1,786 words** across the 9
+   content packs — including **927 words** of researched Dallas prose — reached no built
+   page at all. All four designs now render it; `load_content()` also warns instead of
+   silently dropping a page whose JSON lacks a `sections` key.
+2. **Copy decks** (`COPY` + `copy_deck()`). Every below-hero string is now an authored
+   deck picked per-domain by digest, overridable per site with a `"copy"` map in
+   `sites.json` (e.g. `{"cta": 2}`). Covers the service-tile catalogues, trust bar,
+   why-us, how-it-works, section headings, CTA band, FAQ heading, the sidebar quote card
+   and the fallback FAQ. Catalogues vary in **length** as well as wording — a fixed 6-up
+   grid is itself a fingerprint. Same append-only ordering contract as `BUTTON_STYLES`.
+3. **Structure.** The `footer` axis in `layouts.json` had assigned all 1001 sites one of
+   six values from the start and `footer()` never read it — six garage-native footer
+   variants now exist (`.gfooter.gf--*`), including the `.gf-cta` gradient strip whose
+   CSS had shipped for years with no markup. Homepage section **order** varies per
+   domain (six running orders), banding is applied positionally by `band()` rather than
+   hardcoded per section, `contact_band()` is switched on, and inner/trust pages get one
+   of three article layouts.
+4. **The four dead axis values got real CSS.** `cards:classic`, `feats:tiles`,
+   `steps:cards` and `bands:alt` emitted a class with **no rule behind it**, so ~500
+   sites silently fell back to the base component.
+
+> **Copy rule:** deck variants must be factually *interchangeable* — the same claims in
+> different words. They are re-phrasings, not new promises. Do not add social proof
+> (review counts, ratings, testimonials): the sites have none. The original trust item
+> "Local crew, real reviews" already overstated it and was dropped.
+
+Result, measured on the 7 default-design sites:
+
+| metric | before | after | target |
+|---|---|---|---|
+| below-hero text similarity, median | 78.7% | **46.4%** | ≤65% |
+| below-hero DOM similarity, median | 90.2% | **70.8%** | ≤75% |
+| pairs ≥95% text-identical | 7 of 21 | **0** | 0 |
+| sentences present on *every* site | 7 | **0** | 0 |
+| layout-axis values with no CSS | 4 | **0** | 0 |
+| homepage words discarded | 1,786 | **0** | 0 |
+| text similarity, max pair | 99.6% | 85.6% | <85% |
+
+The one metric still over target is the max pair: `dallasgaragedoor.com` and
+`dallasdoorpros.com` both point at the `dallas-tx` content folder, so they render the
+same authored prose by definition. Excluding that pair, text median is **35.5%** and the
+max is **61.6%**. No renderer change can separate two domains that share a content pack
+— see §7.
+
+**What this does not fix.** 8 of the 9 content packs are 99.4–100% character-identical
+after a city find-and-replace, so inner pages — whose body *is* the pack — remain ~72%
+similar at the median even after all of the above. The decks differentiate the frame
+around the content, not the content. Note also that with 4–6 variants per slot across
+1000 domains, roughly 250 sites share any given deck pick; the decks reduce sameness,
+they do not eliminate it at that scale. More variants, and genuinely per-city content,
+are the next lever.
+
+### Measuring it: `measure_similarity.py`
+
+```bash
+python measure_similarity.py           # report
+python measure_similarity.py --gate    # exit 1 if a target regresses
+```
+
+Scores only the default-design sites (the alt templates are genuinely different pages
+and would flatter the average), normalises away brand/city/state/phone/zip first, and
+annotates pairs that share a content pack so a content problem is not mistaken for a
+template one. It uses `autojunk=False` deliberately: SequenceMatcher's default heuristic
+ignores elements appearing in >1% of sequences longer than 200 items, which on long DOM
+token lists once made similarity appear to *fall* after a change that only added
+variety.
+
+`text_max` is gated only across pairs with **different** content folders. Two domains
+pointing at one pack render the same authored prose by definition, so gating on it would
+leave a permanently-red check that gets bypassed; the pair is still reported and
+annotated. The script also carries the contrast and accessibility gates below.
+
+### Contrast: three surfaces, three tokens
+
+The accent is used in three contexts and needs a different value in each. Getting this
+wrong was the single most widespread defect in the engine:
+
+| token | used for | failing AA before | after |
+|---|---|---|---|
+| `--on-accent` + adjusted `--accent` | the `.btn--primary` label on its fill | **410 / 1001** | **0** |
+| `--accent-lt` | accent text on the light bands (`.eyebrow`, `.brand small`, small icons) | **410 / 437 / 455** on `#fff` / `--soft` / `--soft2` | **0** |
+| `--accent-dk` | accent text on dark grounds (hero, trust bar, dark footer) | 982 / 1001 | 0 |
+
+`on_accent` was hardcoded `#ffffff` on all 1096 themes — `engine.py`'s `theme_from_color`
+targets only 3.4:1 and never considers a dark label — so the **button label, the most
+important text on the page, failed AA on 41% of the fleet** while `themes.json`'s own
+`_comment` claimed the colours were contrast-checked.
+
+`accent_button()` picks the better of white / dark ink (fixes 370 of the 410), then nudges
+the *fill* for the 40 stuck in the mid-tone dead zone where neither label works. Measured
+max shift is **1.11× contrast**, affecting 4 distinct palettes — visually negligible and
+eyeballed. `accent_on_light()` mirrors `accent_on_dark()` against `--soft2`, the lightest
+and therefore binding surface.
+
+> Raw `var(--accent)` is now for **fills, borders and tints only**. Anything that carries
+> meaning uses `--accent-lt` or `--accent-dk` depending on its ground. `scaffold.py`'s
+> dead `make_accent()` already chose between a dark ink and white — the better algorithm
+> sat unused in an unreferenced module the whole time.
+
+### Accessibility
+
+- **`<main id="main">` and a skip link on all 202 pages** (were 0). `<main>` opens at the
+  end of `header()` and closes at the start of `footer()`, so all four renderers get it
+  from one place; the three alt templates patch their own header/footer helpers. The skip
+  link is positioned off-screen rather than `display:none` so it stays focusable.
+- **Tap targets**: `.gf-cols a` was ~32px with no mobile override anywhere in the 46KB
+  stylesheet, on 13–17 links per footer; `.burger` was 40×39px. Both now ≥44px.
+- **`aria-expanded`** on the three alt-template nav toggles — those sites ship no
+  `nav.js`, so their mobile menu state was completely unannounced.
+- `scroll-margin-top` on anchor targets, which the sticky header previously covered.
+
+### The phone-copy defect
+
+An earlier pass guarded every `tel:` **link** but not the **prose**. `trust_page`
+interpolated `{t['phone']}` unconditionally, so 21 of 202 pages rendered *"Call&nbsp; to
+reach …"* and *"Call&nbsp; or use the form."* — an empty gap plus a promise of a form that
+exists on **0 of 1001 sites**. Now guarded, and the form promise is gone until a form
+exists. The similarity gate could never have caught this: `normalise()` strips the phone
+before comparing, which is why `pages_calling_nobody` is its own check.
+
 ---
 
 ## 5. How to create sites in bulk
@@ -389,10 +579,68 @@ Filename encodes the page type: `<prefix>-home.json`, `-svc-<slug>.json`,
    Porta Pros engine" — cosmetic, but another sign large parts of this repo were
    forked from that sibling project without a full pass to re-label things.
 
-None of the above blocks the documented bulk workflow in §5 — `build.py`, `serve.py`,
-`audit_seo.py`, `engine.py new`, and `engine.py bulk` all work as described. The
-issues are in the parts of `engine.py` (`build`, `logos`) and the logo/photo asset
-pipeline that silently do the wrong thing rather than error loudly.
+### Fixed in the CTA / call-bar pass
+
+10. ~~**`build_site.py` would not parse on Python < 3.12.**~~ Two f-strings embedded a
+    backslash in the expression part (lines 169/174), a `SyntaxError` before 3.12 —
+    and since `build.py` imports the module, **no build ran at all** on 3.10/3.11.
+    The regexes are now hoisted into locals. Their text was preserved verbatim:
+    `r"^[-*+]\\s+"` matches a *literal backslash*, so the list marker is never
+    stripped. That is a live bug in the legacy markdown renderer, left unchanged
+    rather than silently altering untested behaviour.
+
+11. ~~**`tel:+1` on 999 sites.**~~ `t["tel"]` was `"+1" + digits`, so an empty phone
+    produced `href="tel:+1"` and a button reading `Call ` with nothing after it — the
+    primary conversion action, dead, on every page of every site without a number.
+    `tel` is now empty when there is no phone, and `call_btn()` / `tel_link()` in
+    `build.py` (plus `_call_target()` / `_tel_or()` in `templates.py`) degrade to the
+    quote page. `telephone` is dropped from the JSON-LD rather than emitted empty.
+    Verified: **0 dead `tel:` links and 0 empty labels across all 202 built pages.**
+
+12. ~~**`org_schema` invented a street address.**~~ `streetAddress` fell back to
+    `t["city"]`, publishing the city name as a street for every site with no address.
+    Now omitted when unknown.
+
+13. ~~**Hero eyebrow failed WCAG AA on 982 of 1001 themes.**~~ `.hero .eyebrow` used
+    raw `var(--accent)` on the dark hero; worst case measured **1.00:1** (identical
+    luminance — invisible). `accent_on_dark()` now derives an `--accent-dk` token.
+    Note the ground is the *lighter* of the two dark surfaces: contrast is fixed by
+    lightening, so the higher-luminance ground is the binding constraint — picking the
+    darker one optimises against the easy case and leaves 982 themes unimproved. The
+    loop also tests the 8-bit-quantised colour, since rounding can shave a 4.4999
+    result past a `>= 4.5` gate. Verified: **0 of 1001 themes fail.**
+
+14. ~~**50 guide photos were unreachable.**~~ `GUIDE_PHOTO_DIRS` mapped each guide slug
+    to a bare folder name, but those 5 folders live under `brand/photos/GD GUIDE/`.
+    Every lookup missed and guide pages silently fell back to generic stock.
+
+15. ~~**`engine.py build` destroyed `dist/`.**~~ It called `build_site.build()` — the
+    porta-potty markdown renderer — which `rmtree`d everything and rebuilt nothing.
+    Now calls `build.build()` and accepts an optional domain list.
+
+16. ~~**`engine.py bulk` crashed on the first new domain.**~~ It appended to
+    `layouts["layouts"]`, a key that does not exist in `config/layouts.json` (a flat
+    `{name: axes}` map) → `KeyError`. Had it succeeded it would have written a hybrid
+    that `build.py`'s name lookup cannot read, silently collapsing every site to
+    `DEFAULT_LAYOUT`. `build.py` never consumed per-domain layout assignments, so the
+    dead `layouts.py` integration was removed. Verified against a new test domain.
+
+17. ~~**`audit_seo.py` crashed on every run.**~~ It appended `o["@type"]` raw, which is
+    a *list* on the business node, then `set()`-ed the result.
+
+18. ~~**28% of titles carried a spurious `...`.**~~ `seo_title()` appended an ellipsis
+    unconditionally after dropping the brand suffix, so 56 of 202 titles advertised a
+    truncation that never happened. Now only when the string is actually cut.
+
+19. ~~**Nav submenus were unreachable between 961 and 1120px.**~~ `NAVJS` gated its
+    accordion on `max-width:960px` while the CSS collapses the nav at `1120px`, so in
+    that 160px band the nav was collapsed but no submenu would open. Breakpoints now
+    match, and the burger and submenu triggers maintain `aria-expanded`.
+
+`build.py <domain> ...` now builds a subset instead of always wiping `dist/`.
+
+The remaining items above are still open — chiefly the two-renderer split, the dead
+`layouts.py`, and the unused `footer` layout axis.
 
 ---
 

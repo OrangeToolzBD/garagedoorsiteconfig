@@ -11,10 +11,11 @@
       "area": "214",
       "street": "",
       "zip": "",
-      "phone": "(214) 000-0000",
+      "phone": "(214) 555-0100",
       "theme": "steel-berry",
       "layout": "aurora",
-      "port": 8201
+      "port": 8201,
+      "services": "timeline"
     },
     {
       "domain": "chicopeegaragedoorpros.com",
@@ -44,7 +45,8 @@
       "phone": "",
       "theme": "mesagaragedoorco",
       "layout": "cobalt",
-      "port": 8203
+      "port": 8203,
+      "services": "orbit"
     },
     {
       "domain": "napervillegaragedoorpros.com",
@@ -104,7 +106,8 @@
       "phone": "",
       "theme": "auroragaragedoorpros",
       "layout": "aurora",
-      "port": 8207
+      "port": 8207,
+      "services": "tabs"
     },
     {
       "domain": "wheatongaragedoorpros.com",
@@ -278,13 +281,14 @@
       "content": "dallas-tx",
       "brand": "Dallas Door Pros",
       "tagline": "Repair · Install · Service",
-      "area": "",
+      "area": "469",
       "street": "2555 N Stemmons Fwy",
       "zip": "75207",
-      "phone": "",
+      "phone": "(469) 555-0142",
       "theme": "dallasdoorpros",
       "layout": "cobalt",
-      "port": 8219
+      "port": 8219,
+      "services": "typo"
     },
     {
       "domain": "ashlandgaragedoorpros.com",
@@ -1268,7 +1272,8 @@
       "phone": "",
       "theme": "puntagordagaragedoorpros",
       "layout": "summit",
-      "port": 8283
+      "port": 8283,
+      "proof": "cinematic"
     },
     {
       "domain": "planogaragedoorpros.com",

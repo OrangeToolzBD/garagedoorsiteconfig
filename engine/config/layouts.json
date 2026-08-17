@@ -1,9 +1,63 @@
 {
   "_comment": "Structural layout variants (separate from colour themes). A site references one via 'layout' in sites.json. Axes: hero (split-right|split-left|banner|stacked|center|overlap), nav (left|center|pill), shape (pill|round|sharp) controls button/card radius, bands (alt|flat) controls section background rhythm, footer (dark|brand|light|cta|center|split), cards (classic|overlay|side|bold) styles the What-We-Rent service cards.",
-  "aurora":   { "hero": "split-right", "nav": "left",   "shape": "pill",  "bands": "alt",  "footer": "brand",  "cards": "classic", "feats": "tiles",   "steps": "cards"    },
-  "meridian": { "hero": "split-left",  "nav": "center", "shape": "round", "bands": "flat", "footer": "light",  "cards": "overlay", "feats": "list",    "steps": "timeline" },
-  "cobalt":   { "hero": "banner",      "nav": "pill",   "shape": "pill",  "bands": "alt",  "footer": "cta",    "cards": "side",    "feats": "bar",     "steps": "bignum"   },
-  "harbor":   { "hero": "stacked",     "nav": "left",   "shape": "pill",  "bands": "flat", "footer": "center", "cards": "bold",    "feats": "minimal", "steps": "timeline" },
-  "summit":   { "hero": "center",      "nav": "left",   "shape": "sharp", "bands": "alt",  "footer": "split",  "cards": "overlay", "feats": "list",    "steps": "cards"    },
-  "monarch":  { "hero": "overlap",     "nav": "pill",   "shape": "pill",  "bands": "flat", "footer": "dark",   "cards": "bold",    "feats": "bar",     "steps": "bignum"   }
+  "aurora": {
+    "hero": "split-right",
+    "nav": "left",
+    "shape": "pill",
+    "bands": "alt",
+    "footer": "brand",
+    "cards": "classic",
+    "feats": "tiles",
+    "steps": "cards"
+  },
+  "meridian": {
+    "hero": "split-left",
+    "nav": "center",
+    "shape": "round",
+    "bands": "flat",
+    "footer": "light",
+    "cards": "overlay",
+    "feats": "list",
+    "steps": "timeline"
+  },
+  "cobalt": {
+    "hero": "banner",
+    "nav": "pill",
+    "shape": "pill",
+    "bands": "alt",
+    "footer": "cta",
+    "cards": "side",
+    "feats": "bar",
+    "steps": "bignum"
+  },
+  "harbor": {
+    "hero": "stacked",
+    "nav": "left",
+    "shape": "pill",
+    "bands": "flat",
+    "footer": "center",
+    "cards": "bold",
+    "feats": "minimal",
+    "steps": "timeline"
+  },
+  "summit": {
+    "hero": "center",
+    "nav": "left",
+    "shape": "sharp",
+    "bands": "alt",
+    "footer": "split",
+    "cards": "feature",
+    "feats": "list",
+    "steps": "cards"
+  },
+  "monarch": {
+    "hero": "overlap",
+    "nav": "pill",
+    "shape": "pill",
+    "bands": "flat",
+    "footer": "dark",
+    "cards": "stack",
+    "feats": "bar",
+    "steps": "bignum"
+  }
 }

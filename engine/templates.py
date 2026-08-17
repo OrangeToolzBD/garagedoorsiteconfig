@@ -16,6 +16,19 @@ H = None  # injected by build.get_renderer()
 
 PHOTOS = "/assets/photos/"
 
+def _call_target(t):
+    """(href, label) for a call CTA that works with or without a phone on file.
+
+    998 of 1001 registered sites have phone:"" -- emitting href="tel:" there gives
+    a dead primary CTA, so fall back to the quote page instead."""
+    if t.get("phone"):
+        return f'tel:{t["tel"]}', f'Call {H.esc(t["phone"])}'
+    return "/request-a-quote/", "Get a free quote"
+
+def _tel_or(t, fallback_href="/request-a-quote/"):
+    """Bare href only: tel: when there is a number, the quote page otherwise."""
+    return f'tel:{t["tel"]}' if t.get("phone") else fallback_href
+
 # ---------------------------------------------------------------- shared bits
 def _head(t, title, desc, url, schemas, fonts, bodyclass="", og=None):
     e = H.esc
@@ -39,7 +52,8 @@ def _head(t, title, desc, url, schemas, fonts, bodyclass="", og=None):
             f'<link href="https://fonts.googleapis.com/css2?{fonts}&display=swap" rel="stylesheet">'
             f'<link rel="stylesheet" href="/assets/site.css">'
             f'<script type="application/ld+json">{json.dumps(graph)}</script>'
-            f'</head><body class="{bodyclass}">')
+            f'</head><body class="{bodyclass}">'
+            f'<a class="skiplink" href="#main">Skip to content</a>')
 
 def _cat(pages, c): return [p for u, p in pages.items() if p["cat"] == c]
 
@@ -64,10 +78,26 @@ def _home_data(t, pages):
          "No - torsion springs are under high tension and can injure. Leave that one to a tech.")])
     return h1, lead, faqs, _cat(pages, "service"), _cat(pages, "area"), _cat(pages, "guide")
 
-def _svc_tiles(pages):
-    """SERVICE_TILES with links resolved to real service pages where they exist."""
+def _local_copy(t, pages):
+    """The homepage content JSON's `sections` array, rendered.
+
+    Same defect the default design had: every homepage JSON carries authored,
+    city-specific prose that was parsed and then dropped. Reuses build.py's
+    home_sections() so all four designs render it identically; each template
+    styles `.localcopy` in its own CSS."""
+    # home_sections returns (html, covered_concepts); the alt templates compose
+    # their own fixed section list, so they only need the html
+    html, _covered = H.home_sections(t, pages.get("/"), pages)
+    return html
+
+def _svc_tiles(pages, t=None):
+    """This site's service catalogue with links resolved to real pages.
+
+    Takes `t` so the alt templates draw from the same per-domain catalogue deck
+    as the default design; falls back to the single legacy list without it."""
     out = []
-    for ic, title, blurb, slug in H.SERVICE_TILES:
+    tiles = H.service_tiles(t) if t is not None else H.SERVICE_TILES
+    for ic, title, blurb, slug in tiles:
         url = f"/services/{slug}/" if slug and f"/services/{slug}/" in pages else "/request-a-quote/"
         out.append((ic, title, blurb, url))
     return out
@@ -183,6 +213,13 @@ header{position:sticky;top:0;z-index:40;background:rgba(251,249,244,.9);backdrop
 .article img{border-radius:2px;margin:22px 0;filter:grayscale(.15)}
 .article details{border-top:1px solid var(--rule);padding:16px 0}.article summary{font-family:"Playfair Display",serif;font-size:1.15rem;cursor:pointer}
 .aside{align-self:start;position:sticky;top:100px;border:1px solid var(--ink);padding:28px}
+.skiplink{position:absolute;left:-9999px;top:0;z-index:100;background:var(--ink);color:var(--cream);padding:12px 18px;font-weight:700;text-decoration:none}
+.skiplink:focus{left:0}
+.localcopy{max-width:760px;margin:0 auto}
+.localcopy h2{font-family:"Playfair Display",serif;font-weight:500;margin-top:1.7em;font-size:clamp(1.4rem,2.6vw,2rem)}
+.localcopy h2:first-child{margin-top:0}
+.localcopy p,.localcopy li{color:var(--muted)}
+.localcopy ul{padding-left:1.1em}
 .aside h3{font-family:"Playfair Display",serif;font-size:1.4rem;margin-bottom:8px}
 .aside p{color:var(--muted);font-size:.92rem;margin-bottom:18px}
 .aside .tel{display:block;font-family:"Playfair Display",serif;font-size:1.6rem;color:var(--brass);margin-bottom:16px}
@@ -223,14 +260,14 @@ def _iron_header(t, pages):
             f'<nav class="nav__side">{left}</nav>'
             f'<a href="/" class="brand serif">{e(t["brand"].split(" ")[0])}<small>{e(" ".join(t["brand"].split(" ")[1:]) or "Garage Works")}</small></a>'
             f'<nav class="nav__side nav__side--r"><a class="ulink" href="/about/">Studio</a><a class="ulink" href="/contact/">Contact</a><a class="ulink" href="/request-a-quote/">Book a Visit</a></nav>'
-            f'<button class="burger" onclick="document.getElementById(\'m\').classList.toggle(\'open\')">Menu</button></div>'
-            f'<nav class="mnav" id="m"><a href="/services/">The Work</a><a href="/service-areas/">Service Areas</a><a href="/guides/">Guides</a><a href="/about/">Studio</a><a href="/contact/">Contact</a><a href="/request-a-quote/">Book a Visit</a></nav></header>')
+            f'<button class="burger" aria-expanded="false" aria-controls="m" onclick="var n=document.getElementById(\'m\');this.setAttribute(\'aria-expanded\',n.classList.toggle(\'open\'))">Menu</button></div>'
+            f'<nav class="mnav" id="m"><a href="/services/">The Work</a><a href="/service-areas/">Service Areas</a><a href="/guides/">Guides</a><a href="/about/">Studio</a><a href="/contact/">Contact</a><a href="/request-a-quote/">Book a Visit</a></nav></header><main id="main">')
 
 def _iron_footer(t, pages):
     e = H.esc
     svc = _cat(pages, "service")[:4]
     slinks = "".join(f'<a href="{p["url"]}">{e(H.area_label(p))}</a>' for p in svc) or '<a href="/services/">Services</a>'
-    return (f'<footer><div class="wrap"><div class="f-word serif">{e(t["brand"].split(" ")[0])}.</div>'
+    return (f'</main><footer><div class="wrap"><div class="f-word serif">{e(t["brand"].split(" ")[0])}.</div>'
             f'<div class="f-cols">'
             f'<div><h4>The Studio</h4><p>A {e(t["city"])} garage door atelier working by appointment across the metro. Small on purpose.</p><p style="color:var(--brass);margin-top:10px">{e(t["phone"])}</p></div>'
             f'<div><h4>Work</h4>{slinks}<a href="/services/">All work</a></div>'
@@ -241,7 +278,7 @@ def _iron_footer(t, pages):
 def iron_home(t, pages):
     e = H.esc
     h1, lead, faqs, svc, areas, guides = _home_data(t, pages)
-    tiles = _svc_tiles(pages)
+    tiles = _svc_tiles(pages, t)
     rows = "".join(f'<a class="svc__row" href="{u}"><div class="svc__no serif">{i+1:02d}</div><div class="svc__t serif">{title}</div><div class="svc__d">{blurb}</div></a>'
                    for i, (ic, title, blurb, u) in enumerate(tiles[:4]))
     q = faqs[0]
@@ -252,7 +289,7 @@ def iron_home(t, pages):
               f'<div class="hero__rule"></div><p class="kick" style="color:#e6c893">Repair · Restoration · Installation</p>'
               f'<h1 class="serif">{e(h1)}</h1><p class="hero__lead">{e(lead)}</p>'
               f'<div class="hero__cta"><a class="pill" style="border-color:#e8e1d4;color:#f6f2ea" href="/services/">See The Work</a>'
-              f'<a class="ulink" href="tel:{t["tel"]}">Or call the studio &nbsp;→</a></div></div></section>'
+              f'<a class="ulink" href="{_tel_or(t)}">Or call the studio &nbsp;→</a></div></div></section>'
             + f'<section class="manifesto wrap"><span class="kick">Our belief</span>'
               f'<p class="serif">A door opens ten thousand times a year. It deserves <span class="em">more thought</span> than a rushed afternoon and a stapled invoice.</p></section>'
             + f'<section class="svc wrap">{rows}</section>'
@@ -265,6 +302,7 @@ def iron_home(t, pages):
             + f'<section class="sec quotes"><div class="wrap quotes__grid">'
               f'<div class="q"><div class="stars">★★★★★</div><blockquote class="serif">"{e(q[1])}"</blockquote><cite>{e(t["city"])} homeowner</cite></div>'
               f'<div class="q"><div class="stars">★★★★★</div><blockquote class="serif">"They talked us out of a full replacement. Rare to be sold less than you walked in expecting."</blockquote><cite>Repeat client — {e(t["city"])}</cite></div></div></section>'
+            + _local_copy(t, pages)
             + f'<section class="sec est wrap"><div class="est__grid">'
               f'<div><span class="kick">Begin</span><h2 class="serif">Every door is a conversation.</h2>'
               f'<p>Tell us what yours is doing, and we\'ll tell you honestly what it needs — repair, restoration, or a fresh install for your {e(t["city"])} home.</p>'
@@ -283,7 +321,7 @@ def iron_inner(t, pages, p):
     img = H.INNER_IMGS[H._stable_idx(p["slug"] or p["url"], len(H.INNER_IMGS))]
     body = _inner_parts(t, p)
     aside = (f'<aside class="aside"><h3 class="serif">Book a visit</h3><p>Considered garage door work in {e(t["city"])}, {e(t["st"])}.</p>'
-             f'<a class="tel serif" href="tel:{t["tel"]}">{e(t["phone"])}</a>'
+             f'<a class="tel serif" href="{_tel_or(t)}">{e(t["phone"]) or "Get a free quote"}</a>'
              f'<a class="pill pill--brass" href="/request-a-quote/">Request an Estimate</a></aside>')
     schemas = _inner_schemas(t, p, h1, label, parent)
     return (_head(t, H.seo_title(p["title"] or f"{h1} | {t['brand']}"), p["meta"] or "", p["url"], schemas, IRON_FONTS, og=img)
@@ -308,7 +346,7 @@ def iron_trust(t, pages, url, h1, blocks, is_quote=False):
     e = H.esc
     body = "".join(f'<h2 class="serif">{e(hh)}</h2><p>{e(bb)}</p>' for hh, bb in blocks)
     aside = (f'<aside class="aside"><h3 class="serif">Talk to us</h3><p>Garage door help in {e(t["city"])}, {e(t["st"])}.</p>'
-             f'<a class="tel serif" href="tel:{t["tel"]}">{e(t["phone"])}</a>'
+             f'<a class="tel serif" href="{_tel_or(t)}">{e(t["phone"]) or "Get a free quote"}</a>'
              f'<a class="pill pill--brass" href="/request-a-quote/">Request a Visit</a></aside>')
     schemas = [H.org_schema(t), H.breadcrumb_schema(t, [("Home", "/"), (h1, url)])]
     return (_head(t, H.seo_title(f"{h1} | {t['brand']}"), f"{h1} — {t['brand']}, {t['city']}, {t['st']}.", url, schemas, IRON_FONTS)
@@ -405,6 +443,13 @@ header{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:2px s
 .article img{border:2px solid #000;margin:20px 0}
 .article details{border-top:1px solid var(--line);padding:14px 0}.article summary{font-family:"Archivo Black";text-transform:uppercase;font-size:.92rem;cursor:pointer}
 .aside{align-self:start;position:sticky;top:96px;border:2px solid #000;box-shadow:8px 8px 0 var(--lime);padding:26px;background:var(--card)}
+.skiplink{position:absolute;left:-9999px;top:0;z-index:100;background:var(--lime);color:#0e0e12;padding:12px 18px;font-weight:700;text-decoration:none}
+.skiplink:focus{left:0}
+.localcopy{max-width:780px;margin:0 auto}
+.localcopy h2{font-family:"Archivo Black",sans-serif;text-transform:uppercase;font-size:clamp(1.2rem,2.4vw,1.7rem);margin-top:1.6em}
+.localcopy h2:first-child{margin-top:0}
+.localcopy p,.localcopy li{color:var(--dim)}
+.localcopy ul{padding-left:1.1em}
 .aside h3{font-family:"Archivo Black";text-transform:uppercase;font-size:1rem;margin-bottom:14px}
 .aside .tel{display:block;font-family:"Archivo Black";font-size:1.4rem;color:var(--lime);margin:10px 0 16px}
 footer{background:#0a0a0d;padding:0 0 30px}
@@ -443,14 +488,14 @@ def _volt_header(t, pages):
     return (f'<header><div class="hd"><a href="/" class="logo"><span class="logo__mark">V⚡</span><span class="logo__t">{e(t["brand"].split(" ")[0])}</span></a>'
             f'<nav>{nav}</nav>'
             f'<div class="hd__cta"><span class="ph">{e(t["phone"])}</span><a class="btn btn--lime" href="/request-a-quote/">Get a Quote →</a></div>'
-            f'<button class="mtoggle" onclick="document.getElementById(\'mn\').classList.toggle(\'open\')">≡</button></div>'
-            f'<nav class="mnav" id="mn"><a href="/services/">Services</a><a href="/service-areas/">Areas</a><a href="/guides/">Guides</a><a href="/about/">About</a><a href="/request-a-quote/">Get a Quote</a></nav></header>')
+            f'<button class="mtoggle" aria-label="Menu" aria-expanded="false" aria-controls="mn" onclick="var n=document.getElementById(\'mn\');this.setAttribute(\'aria-expanded\',n.classList.toggle(\'open\'))">≡</button></div>'
+            f'<nav class="mnav" id="mn"><a href="/services/">Services</a><a href="/service-areas/">Areas</a><a href="/guides/">Guides</a><a href="/about/">About</a><a href="/request-a-quote/">Get a Quote</a></nav></header><main id="main">')
 
 def _volt_footer(t, pages):
     e = H.esc
     svc = _cat(pages, "service")[:4]
     slinks = "".join(f'<a href="{p["url"]}">{e(H.area_label(p))}</a>' for p in svc) or '<a href="/services/">Services</a>'
-    return (f'<footer><div class="wrap"><div class="f-cols">'
+    return (f'</main><footer><div class="wrap"><div class="f-cols">'
             f'<div><div class="logo" style="margin-bottom:14px"><span class="logo__mark">V⚡</span><span class="logo__t">{e(t["brand"].split(" ")[0])}</span></div>'
             f'<p>Flat-rate garage door repair &amp; installation across {e(t["city"])}. Fast, fixed, guaranteed.</p><div class="f-social"><a>IG</a><a>X</a><a>YT</a><a>in</a></div></div>'
             f'<div><h4>Services</h4>{slinks}<a href="/services/">All services</a></div>'
@@ -461,7 +506,7 @@ def _volt_footer(t, pages):
 def volt_home(t, pages):
     e = H.esc
     h1, lead, faqs, svc, areas, guides = _home_data(t, pages)
-    tiles = _svc_tiles(pages)
+    tiles = _svc_tiles(pages, t)
     cards = "".join(f'<a class="card" href="{u}"><div class="card__ic">↯</div><h3>{title}</h3><p>{blurb}</p></a>' for ic, title, blurb, u in tiles)
     faq = "".join(f'<details class="q2"{" open" if i==0 else ""}><summary>{e(q)}</summary><p>{e(a)}</p></details>' for i, (q, a) in enumerate(faqs))
     schemas = [H.org_schema(t), H.faq_schema(faqs)]
@@ -473,7 +518,7 @@ def volt_home(t, pages):
               f'<div class="widget"><h3>Instant Quote</h3><p>// avg. response: 8 minutes</p>'
               f'<label class="field">What\'s wrong?</label><select class="ipt"><option>Broken spring</option><option>Won\'t open / close</option><option>Opener dead</option><option>Off the track</option><option>New door install</option></select>'
               f'<label class="field">ZIP code</label><input class="ipt" placeholder="ZIP"><label class="field">Phone</label><input class="ipt" placeholder="{e(t["phone"])}">'
-              f'<a class="btn btn--lime" href="tel:{t["tel"]}">Get My Price →</a></div></div></section>'
+              f'<a class="btn btn--lime" href="{_tel_or(t)}">Get My Price →</a></div></div></section>'
             + f'<div class="stats"><div class="stat"><b>60s</b><span>To book online</span></div><div class="stat"><b>Same-day</b><span>On most repairs</span></div>'
               f'<div class="stat"><b>Flat-rate</b><span>Priced upfront</span></div><div class="stat"><b>24/7</b><span>Emergency line</span></div></div>'
             + f'<section class="sec wrap"><div class="sec__h"><h2>What we <span style="color:var(--lime)">fix</span></h2><span class="mono" style="color:var(--dim)">// core services</span></div><div class="grid3">{cards}</div></section>'
@@ -481,14 +526,15 @@ def volt_home(t, pages):
               f'<div class="tcard"><div class="stars">★★★★★</div><p>"Booked in the morning, spring replaced by noon. Online quote was the exact price I paid."</p><cite>// local homeowner</cite></div>'
               f'<div class="tcard"><div class="stars">★★★★★</div><p>"Opener died on a Sunday. Someone out in an hour. No weekend surcharge nonsense."</p><cite>// {e(t["city"])} resident</cite></div>'
               f'<div class="tcard"><div class="stars">★★★★★</div><p>"Flat pricing is the whole reason. No hourly meter, no found-another-problem upsell."</p><cite>// repeat customer</cite></div></div></section>'
+            + _local_copy(t, pages)
             + f'<section class="sec wrap" style="padding-top:10px"><div class="sec__h"><h2>Straight <span style="color:var(--blue)">answers</span></h2></div><div class="faq">{faq}</div></section>'
-            + f'<section class="cta"><h2>Stop wrestling that door.</h2><a class="btn" href="tel:{t["tel"]}">⚡ Call {e(t["phone"])}</a></section>'
+            + f'<section class="cta"><h2>Stop wrestling that door.</h2><a class="btn" href="{_call_target(t)[0]}">⚡ {_call_target(t)[1]}</a></section>'
             + _volt_footer(t, pages) + "</body></html>")
 
 def _volt_aside(t):
     e = H.esc
     return (f'<aside class="aside"><h3>Book a fix</h3><p style="color:var(--dim);font-family:\'Space Mono\';font-size:.82rem">// flat-rate, same-day</p>'
-            f'<a class="tel" href="tel:{t["tel"]}">{e(t["phone"])}</a>'
+            f'<a class="tel" href="{_tel_or(t)}">{e(t["phone"]) or "Get a free quote"}</a>'
             f'<a class="btn btn--lime" href="/request-a-quote/" style="width:100%;justify-content:center">Get a Quote →</a></aside>')
 
 def volt_inner(t, pages, p):
@@ -540,6 +586,13 @@ h1,h2,h3{font-family:"Baloo 2",cursive;line-height:1.15;font-weight:800}
 .btn--soft{background:#fff;color:var(--ink);box-shadow:0 6px 18px rgba(44,58,73,.10)}
 .btn:hover{transform:translateY(-3px) scale(1.02)}
 .navwrap{position:sticky;top:16px;z-index:50;padding:0 16px}
+.skiplink{position:absolute;left:-9999px;top:0;z-index:100;background:var(--blue);color:#fff;padding:12px 18px;font-weight:700;text-decoration:none}
+.skiplink:focus{left:0}
+.localcopy{max-width:780px;margin:0 auto;background:#fff;border-radius:var(--r);padding:34px 32px;box-shadow:0 10px 30px rgba(44,58,73,.07)}
+.localcopy h2{font-family:"Baloo 2";font-weight:700;margin-top:1.5em;font-size:clamp(1.25rem,2.3vw,1.65rem)}
+.localcopy h2:first-child{margin-top:0}
+.localcopy p,.localcopy li{color:var(--soft)}
+.localcopy ul{padding-left:1.1em}
 .nav{max-width:1000px;margin:0 auto;background:rgba(255,255,255,.88);backdrop-filter:blur(12px);border:1px solid #e7eef7;border-radius:999px;box-shadow:0 12px 30px rgba(44,58,73,.10);display:flex;align-items:center;justify-content:space-between;padding:10px 12px 10px 22px}
 .logo{display:flex;align-items:center;gap:10px;font-family:"Baloo 2";font-weight:800;font-size:1.25rem}
 .logo__d{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#9cc4ff,var(--blue));box-shadow:0 4px 10px rgba(76,141,255,.4)}
@@ -636,10 +689,8 @@ def _nim_logo(t):
     return '<span class="logo__d"></span>'
 
 def _nim_call(t):
-    """(href, label) for a call button that works with or without a phone on file."""
-    if t.get("phone"):
-        return f'tel:{t["tel"]}', f'Call {H.esc(t["phone"])}'
-    return "/request-a-quote/", "Call now"
+    """Back-compat alias; use _call_target()."""
+    return _call_target(t)
 
 def _nim_drop(pages, cat, all_url, all_label, trigger):
     e = H.esc
@@ -657,15 +708,15 @@ def _nim_header(t, pages):
     return (f'<div class="navwrap"><nav class="nav"><a href="/" class="logo">{_nim_logo(t)}{e(t["brand"].split(" ")[0])}</a>'
             f'<div class="nav__links">{links}</div>'
             f'<a class="btn btn--blue" href="/request-a-quote/">Book now</a>'
-            f'<button class="navtoggle" onclick="document.getElementById(\'mm\').classList.toggle(\'open\')">☰</button></nav>'
-            f'<div class="mmenu" id="mm"><a href="/services/">Services</a><a href="/service-areas/">Areas</a><a href="/guides/">Guides</a><a href="/about/">About</a><a href="/request-a-quote/">Book now</a></div></div>')
+            f'<button class="navtoggle" aria-label="Menu" aria-expanded="false" aria-controls="mm" onclick="var n=document.getElementById(\'mm\');this.setAttribute(\'aria-expanded\',n.classList.toggle(\'open\'))">☰</button></nav>'
+            f'<div class="mmenu" id="mm"><a href="/services/">Services</a><a href="/service-areas/">Areas</a><a href="/guides/">Guides</a><a href="/about/">About</a><a href="/request-a-quote/">Book now</a></div></div><main id="main">')
 
 def _nim_footer(t, pages):
     e = H.esc
     svc = _cat(pages, "service")[:4]
     slinks = "".join(f'<a href="{p["url"]}">{e(H.area_label(p))}</a>' for p in svc) or '<a href="/services/">Services</a>'
     line = e(t["phone"]) if t.get("phone") else "Friendly help, on your schedule."
-    return (f'<footer><div class="wrap"><div class="f-top">'
+    return (f'</main><footer><div class="wrap"><div class="f-top">'
             f'<div><div class="logo" style="margin-bottom:12px">{_nim_logo(t)}{e(t["brand"].split(" ")[0])}</div>'
             f'<p style="max-width:30ch">Friendly garage door care for {e(t["city"])} homes. The neighborly first call.</p><div class="f-social"><a>f</a><a>◎</a><a>▷</a></div></div>'
             f'<div><h4>Help with</h4>{slinks}<a href="/services/">All services</a></div>'
@@ -676,7 +727,7 @@ def _nim_footer(t, pages):
 def nim_home(t, pages):
     e = H.esc
     h1, lead, faqs, svc, areas, guides = _home_data(t, pages)
-    tiles = _svc_tiles(pages)
+    tiles = _svc_tiles(pages, t)
     tt = "".join(f'<a class="tile" href="{u}"><div class="tile__ic">🔧</div><h3>{title}</h3><p>{blurb}</p><span class="more">Learn more →</span></a>' for ic, title, blurb, u in tiles)
     faq = "".join(f'<details class="fq"{" open" if i==0 else ""}><summary>{e(q)}</summary><p>{e(a)}</p></details>' for i, (q, a) in enumerate(faqs))
     chref, clabel = _nim_call(t)
@@ -700,6 +751,7 @@ def nim_home(t, pages):
               f'<div class="bubble"><div class="stars">★★★★★</div><p>"So refreshing. Explained everything, no jargon, no pressure. My door\'s never been quieter!"</p><div class="who"><span class="av"></span><div><b>Priya S.</b><span>{e(t["city"])}</span></div></div></div>'
               f'<div class="bubble"><div class="stars">★★★★★</div><p>"Texted at breakfast, fixed by lunch. Genuinely lovely people to have in your driveway."</p><div class="who"><span class="av"></span><div><b>Marcus L.</b><span>{e(t["city"])}</span></div></div></div>'
               f'<div class="bubble"><div class="stars">★★★★★</div><p>"They could\'ve sold me a new door and didn\'t. Just an honest little repair. Customers for life."</p><div class="who"><span class="av"></span><div><b>Dana &amp; Rob</b><span>{e(t["city"])}</span></div></div></div></div></div></section>'
+            + _local_copy(t, pages)
             + f'<section class="sec" style="padding-bottom:20px"><div class="wrap"><div class="sec__head"><span class="eyebrow">Good to know</span><h2>Little questions, answered</h2></div><div class="faqs">{faq}</div></div></section>'
             + f'<div class="ctawrap"><div class="cta"><h2>Let\'s get that door smiling again 🙂</h2><p>Book a warm, no-pressure visit with your {e(t["city"])} neighbors.</p><a class="btn" href="{chref}">📞 {clabel}</a></div></div>'
             + _nim_footer(t, pages) + "</body></html>")

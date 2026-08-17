@@ -166,12 +166,21 @@ def render_md(md):
         if re.match(r"^[-*+]\s+", s):
             out.append("<ul>")
             while i < n and re.match(r"^[-*+]\s+", lines[i].strip()):
-                out.append(f"<li>{_inline(re.sub(r'^[-*+]\\s+','',lines[i].strip()))}</li>"); i += 1
+                # pattern hoisted out of the f-string: a backslash inside an f-string
+                # expression is a SyntaxError before Python 3.12, and build.py imports
+                # this module, so it blocked every build on 3.10/3.11.
+                # NB: r"^[-*+]\\s+" matches a literal backslash, so this sub never
+                # fires and the list marker survives into the <li>. Preserved verbatim
+                # rather than silently changing this untested legacy renderer.
+                item = re.sub(r"^[-*+]\\s+", "", lines[i].strip())
+                out.append(f"<li>{_inline(item)}</li>"); i += 1
             out.append("</ul>"); continue
         if re.match(r"^\d+\.\s+", s):
             out.append("<ol>")
             while i < n and re.match(r"^\d+\.\s+", lines[i].strip()):
-                out.append(f"<li>{_inline(re.sub(r'^\\d+\\.\\s+','',lines[i].strip()))}</li>"); i += 1
+                # same hoist + same preserved literal-backslash quirk as the <ul> branch
+                item = re.sub(r"^\\d+\\.\\s+", "", lines[i].strip())
+                out.append(f"<li>{_inline(item)}</li>"); i += 1
             out.append("</ol>"); continue
         buf = [s]; i += 1
         while i < n and lines[i].strip() and not re.match(r"^(#{1,6}\s|[-*+]\s|\d+\.\s|\|)", lines[i].strip()):
@@ -389,18 +398,115 @@ def short(text, n=95):
     return (text[:n].rstrip() + "…") if len(text) > n else text
 
 # ------------------------------------------------------------------ CSS
+def _rgb(h):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+def _relum(c):
+    f = lambda v: (v / 255) / 12.92 if v / 255 <= .03928 else (((v / 255) + .055) / 1.055) ** 2.4
+    return .2126 * f(c[0]) + .7152 * f(c[1]) + .0722 * f(c[2])
+
+def _cratio(a, b):
+    l = sorted([_relum(a), _relum(b)], reverse=True)
+    return (l[0] + .05) / (l[1] + .05)
+
+# Themes tune "accent" for contrast against white/near-black page backgrounds, but
+# every hero variant paints it on a dark ground: the pd->p gradient, or the
+# rgba(11,18,28,.74) photo overlay on hero--banner. Raw accent measured as low as
+# 1.00:1 there (identical luminance -- literally invisible), and 982 of the 1001
+# configured themes fell below AA.
+BANNER_OVERLAY = (11, 18, 28)
+
+def accent_on_dark(accent, pd):
+    """Lighten a copy of the accent until small text clears WCAG AA on the hero.
+
+    The ground is the *lighter* of the two dark surfaces, not the darker one:
+    contrast here is fixed by lightening, so the higher-luminance ground is the
+    binding constraint. Picking the darker one optimises against the easy case --
+    only 10 of 1001 themes have a pd darker than the banner overlay, so that
+    left 982 themes unimproved."""
+    ground = max((_rgb(pd), BANNER_OVERLAY), key=_relum)
+    c = list(_rgb(accent))
+    for _ in range(24):
+        # test the quantised colour: rounding to 8-bit can shave the ratio just
+        # under the threshold after a float comparison has already passed
+        q = tuple(max(0, min(255, int(round(v)))) for v in c)
+        if _cratio(q, ground) >= 4.5:
+            return "#%02x%02x%02x" % q
+        c = [v + (255 - v) * .10 for v in c]
+    return "#%02x%02x%02x" % tuple(max(0, min(255, int(round(v)))) for v in c)
+
+INK = "#111820"                 # dark label option, matches --ink
+LIGHTEST_SURFACE = (238, 242, 246)   # --soft2, the hardest of the three light bands
+
+def _hex(c):
+    return "#%02x%02x%02x" % tuple(max(0, min(255, int(round(v)))) for v in c)
+
+def best_label(accent):
+    """(label_colour, ratio) -- white or dark ink, whichever reads better on the fill."""
+    w, k = _cratio((255, 255, 255), _rgb(accent)), _cratio(_rgb(INK), _rgb(accent))
+    return ("#ffffff", w) if w >= k else (INK, k)
+
+def accent_button(accent):
+    """(fill, label) for a filled accent button whose label clears WCAG AA.
+
+    `on_accent` is hardcoded to #ffffff for all 1096 themes -- engine.py's
+    theme_from_color only ever targets 3.4:1 against white and never considers a
+    dark label -- so the button label, the most important text on the page,
+    failed 4.5:1 on 410 of the 1001 in-use themes.
+
+    Choosing the better of white/ink fixes 370 of those. For the remaining 40 the
+    accent sits in the mid-tone dead zone where neither label works, so nudge the
+    fill toward whichever end it is already closer to until one does. Measured
+    max shift is 1.11x contrast against the original -- visually negligible, and
+    only applied to the ~4% of themes that need it."""
+    c = list(_rgb(accent))
+    for _ in range(26):
+        q = _hex(c)
+        label, ratio = best_label(q)
+        if ratio >= 4.5:
+            return q, label
+        if _cratio(_rgb(INK), _rgb(q)) > _cratio((255, 255, 255), _rgb(q)):
+            c = [v + (255 - v) * .06 for v in c]   # lighten -> dark ink label
+        else:
+            c = [v * .94 for v in c]               # darken  -> white label
+    q = _hex(c)
+    return q, best_label(q)[0]
+
+def accent_on_light(accent):
+    """Darken a copy of the accent until small text clears AA on the light bands.
+
+    Mirror of accent_on_dark. `.eyebrow` and friends render raw --accent on
+    #ffffff / --soft / --soft2; that failed 4.5:1 on 410 / 437 / 455 of the 1001
+    in-use themes respectively. Optimising against --soft2 (the lightest, and so
+    the binding constraint) covers all three."""
+    c = list(_rgb(accent))
+    for _ in range(28):
+        q = tuple(max(0, min(255, int(round(v)))) for v in c)
+        if _cratio(q, LIGHTEST_SURFACE) >= 4.5:
+            return "#%02x%02x%02x" % q
+        c = [v * .92 for v in c]
+    return _hex(c)
+
 def css(t):
     shape = t.get("layout", {}).get("shape", "pill")
     btnr = {"pill": "999px", "round": "12px", "sharp": "3px"}.get(shape, "999px")
     cardr = {"pill": "16px", "round": "14px", "sharp": "4px"}.get(shape, "16px")
+    fill, label = accent_button(t["accent"])
     return CSS_TMPL.replace("__P__", t["p"]).replace("__PD__", t["pd"]) \
-        .replace("__ACCENT__", t["accent"]).replace("__ONACCENT__", t["on_accent"]) \
+        .replace("__ACCENT__", fill).replace("__ONACCENT__", label) \
+        .replace("__ACCENTLT__", accent_on_light(t["accent"])) \
+        .replace("__ACCENTDK__", accent_on_dark(t["accent"], t["pd"])) \
         .replace("__DISPLAY__", t["display"]).replace("__BODY__", t["body"]) \
         .replace("__BTNR__", btnr).replace("__CARDR__", cardr)
 
 CSS_TMPL = """
 :root{
+  /* --accent is the fill; --accent-dk is accent-coloured TEXT on dark grounds,
+     --accent-lt the same on light grounds. Use the variants for anything that
+     carries meaning; raw --accent is for fills, borders and tints only. */
   --p:__P__;--pd:__PD__;--accent:__ACCENT__;--on-accent:__ONACCENT__;
+  --accent-dk:__ACCENTDK__;--accent-lt:__ACCENTLT__;
   --ink:#182029;--muted:#5c6773;--bg:#ffffff;--soft:#f5f7f9;--soft2:#eef2f6;
   --line:#e3e8ee;--card:#ffffff;--radius:__CARDR__;--btn-r:__BTNR__;--maxw:1180px;
   --shadow:0 1px 2px rgba(16,32,48,.05),0 8px 24px rgba(16,32,48,.06);
@@ -410,6 +516,15 @@ CSS_TMPL = """
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 html,body{overflow-x:clip;max-width:100%}
+/* Skip link: no page had one, and with a sticky header plus a mega-menu ahead of
+   the content a keyboard user tabbed through ~40 nav links on every page.
+   Positioned off-screen rather than display:none so it stays focusable. */
+.skiplink{position:absolute;left:-9999px;top:0;z-index:100;background:var(--p);color:#fff;
+  padding:12px 18px;font-family:var(--disp);font-weight:700;text-decoration:none;
+  border-radius:0 0 8px 0}
+.skiplink:focus{left:0}
+/* the sticky header would otherwise cover an in-page anchor target */
+#main,[id]{scroll-margin-top:88px}
 body{margin:0;font-family:var(--body);color:var(--ink);background:var(--bg);line-height:1.65;font-size:17px}
 h1,h2,h3,h4{font-family:var(--disp);line-height:1.12;letter-spacing:-.02em;margin:0 0 .5em;font-weight:700}
 h1{font-size:clamp(2.1rem,4.2vw,3.3rem);font-weight:800}
@@ -420,7 +535,7 @@ a{color:var(--p);text-decoration:none}
 a:hover{text-decoration:underline}
 img{max-width:100%;display:block}
 .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
-.eyebrow{font-family:var(--disp);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.8rem;color:var(--accent);margin:0 0 .6rem}
+.eyebrow{font-family:var(--disp);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.8rem;color:var(--accent-lt);margin:0 0 .6rem}
 .sec{padding:76px 0}
 .sec--soft{background:var(--soft)}
 .sec-head{max-width:720px;margin:0 auto 46px;text-align:center}
@@ -441,7 +556,7 @@ img{max-width:100%;display:block}
 .top{background:var(--pd);color:#fff;font-size:.85rem}
 .top .wrap{display:flex;align-items:center;gap:14px;padding:8px 24px}
 .top a{color:#fff;font-weight:600}
-.top a svg{width:12px;height:12px;fill:var(--accent);vertical-align:-1px;margin-right:4px}
+.top a svg{width:12px;height:12px;fill:var(--accent-dk);vertical-align:-1px;margin-right:4px}
 .top .dot{opacity:.4}
 .top .tsp{flex:1}
 .nav-cta-m{display:none}
@@ -458,7 +573,7 @@ header.site{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.92);ba
 .brand__full--ft{background:#fff;border-radius:12px;padding:8px 12px;box-shadow:var(--shadow)}
 .brand__full--ft img{height:40px;max-width:230px}
 @media(max-width:560px){.brand__full img{height:38px;max-width:180px}}
-.brand small{display:block;font-size:.64rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-top:1px}
+.brand small{display:block;font-size:.64rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-lt);margin-top:1px}
 nav.main{margin-left:auto;display:flex;align-items:center;gap:2px;flex:0 1 auto}
 nav.main>a,.nav-item>button{font-family:var(--disp);font-weight:600;font-size:.88rem;color:var(--ink);background:none;border:0;padding:8px 9px;border-radius:10px;cursor:pointer;white-space:nowrap}
 nav.main>a:hover,.nav-item>button:hover{background:var(--soft);text-decoration:none}
@@ -475,18 +590,18 @@ nav.main>a:hover,.nav-item>button:hover{background:var(--soft);text-decoration:n
 .hd .tel{margin-left:4px;display:inline-flex;align-items:center;gap:7px;font-family:var(--disp);font-weight:700;color:var(--p);white-space:nowrap;flex:0 0 auto;font-size:.95rem}
 .hd .tel svg{fill:var(--accent);flex:0 0 auto}
 .hd .btn{margin-left:2px;flex:0 0 auto;padding:12px 20px}
-.burger{display:none;margin-left:auto;background:none;border:0;cursor:pointer;padding:8px}
+.burger{display:none;margin-left:auto;background:none;border:0;cursor:pointer;padding:8px;min-width:44px;min-height:44px}
 .burger span{display:block;width:24px;height:2.5px;background:var(--ink);border-radius:2px;margin:5px 0}
 /* hero (variant-aware) */
 .hero{position:relative;background:linear-gradient(155deg,var(--pd),var(--p));color:#fff;overflow:hidden}
 .hero::after{content:"";position:absolute;right:-140px;top:-140px;width:420px;height:420px;border-radius:50%;background:var(--accent);opacity:.14}
 .hero h1{color:#fff}
-.hero .eyebrow{color:var(--accent)}
+.hero .eyebrow{color:var(--accent-dk)}
 .hero .lead{font-size:1.18rem;color:rgba(255,255,255,.9);max-width:42ch;margin:0 0 26px}
 .hero .cta{display:flex;gap:13px;flex-wrap:wrap;margin-bottom:26px}
 .hero .chips{display:flex;flex-wrap:wrap;gap:10px 20px;list-style:none;padding:0;margin:0}
 .hero .chips li{display:flex;align-items:center;gap:8px;font-size:.94rem;color:rgba(255,255,255,.92)}
-.hero .chips svg{width:18px;height:18px;fill:var(--accent)}
+.hero .chips svg{width:18px;height:18px;fill:var(--accent-dk)}
 .hero__media{position:relative}
 .hero__media img{border-radius:calc(var(--radius) + 4px);box-shadow:var(--shadow-lg);aspect-ratio:4/3;object-fit:cover;width:100%}
 .hero__badge{position:absolute;left:-18px;bottom:-18px;background:#fff;color:var(--ink);border-radius:var(--radius);padding:14px 18px;box-shadow:var(--shadow-lg);display:flex;align-items:center;gap:12px}
@@ -532,12 +647,18 @@ nav.main>a:hover,.nav-item>button:hover{background:var(--soft);text-decoration:n
 /* -- section band rhythm -- */
 .lay-bands-flat .sec--soft{background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .lay-bands-flat .trust{background:var(--pd)}
+/* alt: was the no-op default on 501 sites -- "alt" meant nothing, the tint came
+   entirely from .sec--soft. Give the alternating band an actual edge so the
+   rhythm reads, and tint the trust bar with the accent rather than the primary. */
+.lay-bands-alt .sec--soft{border-top:1px solid color-mix(in srgb,var(--p) 10%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--p) 10%,transparent)}
+.lay-bands-alt .trust{background:linear-gradient(90deg,var(--p),var(--pd))}
 /* trust bar */
 .trust{background:var(--p);color:#fff}
 .trust .wrap{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;padding:22px 24px}
 .trust div{display:flex;align-items:center;gap:12px;justify-content:center;font-weight:600;font-size:.96rem}
-.trust svg{fill:none;stroke:var(--accent);color:var(--accent);flex:0 0 auto}
-.trust b{color:var(--accent)}
+.trust svg{fill:none;stroke:var(--accent-dk);color:var(--accent-dk);flex:0 0 auto}
+.trust b{color:var(--accent-dk)}
 /* generic grid */
 .grid{display:grid;gap:24px}
 .g3{grid-template-columns:repeat(3,1fr)}
@@ -570,6 +691,31 @@ nav.main>a:hover,.nav-item>button:hover{background:var(--soft);text-decoration:n
 .scards--bold .scard h3{text-transform:uppercase;letter-spacing:.02em;font-size:1.06rem}
 .scards--bold .scard .more{display:none}
 .scards--bold .scard__b{padding-bottom:22px}
+/* feature: the first service gets a full-width lead card, the rest a tighter
+   grid beneath it -- breaks the uniform N-up rhythm every other style shares */
+.scards--feature{grid-template-columns:repeat(3,1fr)}
+.scards--feature .scard:first-child{grid-column:1/-1;flex-direction:row;align-items:stretch}
+.scards--feature .scard:first-child img{width:48%;flex:0 0 48%;aspect-ratio:auto;object-fit:cover}
+.scards--feature .scard:first-child .scard__b{padding:30px 32px;display:flex;
+  flex-direction:column;justify-content:center}
+.scards--feature .scard:first-child h3{font-size:1.5rem}
+.scards--feature .scard:first-child p{font-size:1.03rem}
+/* rows: one per line, thumbnail left -- reads as a directory, not a gallery */
+.scards--rows{grid-template-columns:1fr;gap:14px}
+.scards--rows .scard{flex-direction:row;align-items:center}
+.scards--rows .scard img{width:150px;flex:0 0 150px;aspect-ratio:4/3;object-fit:cover}
+.scards--rows .scard__b{padding:16px 22px}
+.scards--rows .scard h3{margin-bottom:3px}
+/* classic: was a no-op -- the value existed in layouts.json and on 166 sites but
+   had no CSS at all, so those sites silently fell back to the bare .scard.
+   Editorial treatment: no card chrome, a rule between rows, wide image. */
+.scards--classic{gap:0 34px}
+.scards--classic .scard{background:none;border:0;border-radius:0;box-shadow:none;
+  border-bottom:1px solid var(--line);padding-bottom:20px}
+.scards--classic .scard:hover{transform:none;box-shadow:none}
+.scards--classic .scard img{border-radius:var(--radius);aspect-ratio:16/10}
+.scards--classic .scard__b{padding:16px 2px 0}
+.scards--classic .scard h3{font-size:1.12rem}
 /* feature tiles */
 .feat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow)}
 .feat .ic{width:50px;height:50px;border-radius:13px;background:color-mix(in srgb,var(--accent) 16%,#fff);color:var(--p);display:flex;align-items:center;justify-content:center;margin-bottom:14px}
@@ -584,14 +730,27 @@ nav.main>a:hover,.nav-item>button:hover{background:var(--soft);text-decoration:n
 .step p{color:var(--muted);margin:0;font-size:.95rem}
 .step__b{min-width:0}
 /* -- feature-section variants (Why Us) -- */
+/* tiles: was a no-op. 166 sites carried this value and got the bare .feat.
+   Give it an actual identity: centred, accent-ringed icon, no card border. */
+.feats--tiles .feat{text-align:center;border:0;background:none;box-shadow:none;padding:22px 18px}
+.feats--tiles .feat .ic{margin:0 auto 14px;border-radius:50%;width:58px;height:58px;
+  box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 12%,transparent)}
+.feats--tiles .feat h3{font-size:1.05rem}
 .feats--list .feat{display:flex;gap:16px;align-items:flex-start}
 .feats--list .feat .ic{margin-bottom:0;flex:0 0 50px}
 .feats--bar .feat{border-top:3px solid var(--accent)}
 .feats--minimal{gap:0}
 .feats--minimal .feat{display:flex;gap:16px;align-items:flex-start;background:none;border:0;border-top:1px solid var(--line);border-radius:0;box-shadow:none;padding:22px 4px}
-.feats--minimal .feat .ic{background:none;width:36px;height:36px;margin-bottom:0;color:var(--accent);flex:0 0 36px}
-.feats--minimal .feat .ic svg{color:var(--accent)}
+.feats--minimal .feat .ic{background:none;width:36px;height:36px;margin-bottom:0;color:var(--accent-lt);flex:0 0 36px}
+.feats--minimal .feat .ic svg{color:var(--accent-lt)}
 /* -- how-it-works variants -- */
+/* cards: was a no-op on 333 sites -- same bare .step as everyone else. Make it
+   an actual card treatment: tinted panel, numeral inline in the heading row. */
+.steps--cards .step{background:color-mix(in srgb,var(--accent) 7%,#fff);
+  border-color:color-mix(in srgb,var(--accent) 22%,var(--line));box-shadow:none;
+  padding:34px 24px 26px}
+.steps--cards .step::before{border-radius:50%;top:-20px;left:50%;transform:translateX(-50%)}
+.steps--cards .step h3{margin-top:8px}
 .steps--bignum{grid-template-columns:1fr;gap:0}
 .steps--bignum .step{display:flex;gap:22px;align-items:center;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;box-shadow:none;padding:22px 2px}
 .steps--bignum .step:last-child{border-bottom:0}
@@ -682,6 +841,28 @@ footer.site a.btn--ghost,footer.site a.btn--ghost:hover{color:#fff}
 .page-hero .crumb a{color:rgba(255,255,255,.85)}
 .page-hero h1{color:#fff;margin:0}
 .article{display:grid;grid-template-columns:1fr 320px;gap:48px;padding:56px 0}
+/* inner-article layouts. Every inner page on every site used the same
+   prose-left / sidebar-right grid, which left inner pages measurably MORE
+   alike than homepages (90% DOM similarity) even after the copy work. */
+.article--left{grid-template-columns:320px 1fr}
+.article--left .aside{grid-column:1;grid-row:1}
+.article--left .body{grid-column:2;grid-row:1}
+.article--wide{grid-template-columns:1fr;gap:34px;max-width:820px;margin:0 auto}
+.article--wide .aside{position:static}
+.article--wide .qcard{display:grid;grid-template-columns:auto 1fr auto;align-items:center;
+  gap:16px 20px;text-align:left}
+.article--wide .qcard h3{margin:0}
+.article--wide .qcard p{grid-column:2;margin:0}
+.article--wide .qcard .tel{grid-column:3;grid-row:1;margin:0}
+.article--wide .qcard .btn{grid-column:3;width:auto}
+@media(max-width:960px){
+  .article--left{grid-template-columns:1fr}
+  .article--left .aside,.article--left .body{grid-column:1}
+  .article--left .body{grid-row:1}
+  .article--left .aside{grid-row:2}
+  .article--wide .qcard{grid-template-columns:1fr;text-align:center}
+  .article--wide .qcard p,.article--wide .qcard .tel,.article--wide .qcard .btn{grid-column:1}
+}
 .article .body>h2{margin-top:1.8em}
 .article .body>h2:first-child{margin-top:0}
 .article .body img{border-radius:14px;margin:1.2em 0}
@@ -788,10 +969,21 @@ footer.site a.btn--ghost,footer.site a.btn--ghost:hover{color:#fff}
 
 NAVJS = """(function(){
  var b=document.querySelector('.burger'),n=document.querySelector('nav.main');
- if(b)b.addEventListener('click',function(){n.classList.toggle('open')});
+ if(b)b.addEventListener('click',function(){
+   var open=n.classList.toggle('open');
+   b.setAttribute('aria-expanded',open?'true':'false');
+ });
  document.querySelectorAll('.nav-item>button').forEach(function(btn){
    btn.addEventListener('click',function(e){
-     if(window.matchMedia('(max-width:960px)').matches){e.preventDefault();btn.parentNode.classList.toggle('open')}
+     // must match the CSS mobile-nav breakpoint (max-width:1120px). This was
+     // 960px, so between 961 and 1120 the nav was already collapsed but the
+     // accordion never opened -- every Services / Service Areas / Guides link
+     // was unreachable in that 160px band.
+     if(window.matchMedia('(max-width:1120px)').matches){
+       e.preventDefault();
+       var item=btn.parentNode, open=item.classList.toggle('open');
+       btn.setAttribute('aria-expanded',open?'true':'false');
+     }
    });
  });
  // scroll-reveal entrance animations
@@ -799,14 +991,22 @@ NAVJS = """(function(){
    var root=document.documentElement;
    if(!root.classList.contains('anim')) return;
    if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+   // NB: this list predated every component added later -- the area grid, stat
+   // tiles, ranked lists, editorial rows, photo bands, pull quotes and reviews
+   // were all rendering with no entrance animation at all.
    var sel='.sec-head,.scard,.feat,.step,.pricewrap,.areas a,.cta-band,.faq details,'+
+           '.svc-card,.areagrid li,.lstat,.ranklist li,.srow,.localcopy>*,'+
+           '.svcx-leadlink,.svcx-rail li,.svcx-blk,.svcx-acc,.svcx-pill,'+
+           '.svcx-vis,.svcx-pc,.svcx-stack,'+
+           '.shots figure,.splitfeat__img,.splitfeat__b,.pullq,.rev,.lead-para,'+
            '.article .body>h2,.article .body>h3,.article .body>p,.article .body>ul,.article .body>ol,'+
            '.article .body>.tw,.article .body>.faq,.article .body>img,.aside';
    var els=[].slice.call(document.querySelectorAll(sel));
    if(!els.length) return;
    els.forEach(function(el){el.classList.add('reveal')});
    // stagger items inside grids/lists
-   [].forEach.call(document.querySelectorAll('.grid,.steps,.areas,.faq'),function(g){
+   [].forEach.call(document.querySelectorAll('.grid,.steps,.areas,.faq,.areagrid,.lstats,.ranklist,.srows,.revs,.svc-grid,.shots,'+
+            '.svcx--bento,.svcx-rail,.svcx-pills,.svcx-pcs,.svcx--accordion'),function(g){
      var i=0;[].forEach.call(g.children,function(c){if(c.classList.contains('reveal')){c.style.transitionDelay=(Math.min(i,6)*80)+'ms';i++;}});
    });
    function showAll(){els.forEach(function(el){el.classList.add('in')});}
