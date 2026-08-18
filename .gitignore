@@ -16,3 +16,6 @@ engine/dist/
 
 # Source asset archives (already extracted into brand/photos/)
 photos/*.zip
+
+# Preview bundle (regenerable: `python engine/preview_bundle.py`)
+engine/preview/

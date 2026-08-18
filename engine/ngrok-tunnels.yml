@@ -18,6 +18,16 @@ version: "2"
 # (/assets/..., /services/...), so these cannot be multiplexed behind one hostname on
 # separate paths -- the asset and nav URLs would resolve to the tunnel root and 404.
 tunnels:
+  # PREFERRED: one tunnel covering all five sites, via the preview_bundle.py output.
+  # This is the only option that works on ngrok's free plan.
+  #   python preview_bundle.py && python serve_preview.py
+  #   ngrok start preview --config "$env:LOCALAPPDATA\ngrok\ngrok.yml" --config engine\ngrok-tunnels.yml
+  preview:
+    proto: http
+    addr: 8100
+
+  # The per-site tunnels below serve each domain on its own origin (closest to
+  # production, since no path prefix is involved) but need five concurrent tunnels.
   dallas-door-pros:
     proto: http
     addr: 8219
