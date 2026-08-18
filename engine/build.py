@@ -19,8 +19,45 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG = os.path.join(ROOT, "config")
 CONTENT = os.path.join(ROOT, "content")
 DIST = os.path.join(ROOT, "dist")
-LOGOS = os.path.join(os.path.dirname(ROOT), "brand", "logos")   # per-domain brand logos (logo_gen.py)
 BUILD_DATE = date.today().isoformat()
+
+# Brand assets have lived at both <repo>/brand/ and <repo>/engine/brand/ at different
+# points, and having two copies is genuinely confusing: dropping a new logo into the
+# one the build does *not* read looks exactly like the build ignoring your file.
+# So resolve it rather than hard-code it -- newest wins, and say out loud which won.
+def _brand_root(kind):
+    """Path to brand/<kind>, preferring whichever copy has the most files."""
+    cands = [os.path.join(os.path.dirname(ROOT), "brand", kind),
+             os.path.join(ROOT, "brand", kind)]
+    live = [(len([1 for _, _, fs in os.walk(p) for _ in fs]), p) for p in cands if os.path.isdir(p)]
+    if not live:
+        return cands[0]
+    # most files wins; on a tie the repo-root copy wins, because `cands` is in
+    # preference order and sort() is stable. Never let it come down to path spelling.
+    live.sort(key=lambda x: -x[0])
+    if len(live) > 1:
+        print(f"  note: brand/{kind} exists in two places; using {live[0][1]} "
+              f"({live[0][0]} files), ignoring {live[1][1]} ({live[1][0]} files)")
+    return live[0][1]
+
+LOGOS = _brand_root("logos")    # per-domain brand logos (logo_prep.py / logo_gen.py)
+
+# logo_prep.py's manifest: {domain: {kind, w, h}} for the 200 hand-made lockups.
+# "kind" decides whether the header prints the business name beside the mark -- a
+# lockup already draws the name into the artwork, so repeating it reads as a bug.
+# Anything absent here (logo_gen.py's symbol-only marks) defaults to "mark".
+try:
+    LOGO_INFO = json.load(open(os.path.join(LOGOS, "_logo_manifest.json"), encoding="utf-8"))
+except Exception:
+    LOGO_INFO = {}
+
+def logo_box(t, h):
+    """(width, height) to render this site's logo at, at `h` px tall, preserving the
+    real aspect ratio. Forcing every mark into a square box squashed the wide
+    wordmarks (Mesa's is 3:1) and left the square badges swimming in padding."""
+    info = t.get("logo") or {}
+    w, hh = info.get("w") or 1, info.get("h") or 1
+    return max(1, round(h * w / hh)), h
 
 # Reuse the niche-agnostic design system (CSS template, theme wrapper, mobile nav JS, icons).
 from build_site import CSS_TMPL, NAVJS, css, icon  # noqa: E402
@@ -45,8 +82,61 @@ HERO_IMG = "gd-4.jpg"
 CARD_IMGS = ["gd-2.jpg", "gd-3.jpg", "gd-5.jpg", "gd-6.jpg", "gd-7.jpg", "gd-9.jpg"]
 INNER_IMGS = ["gd-1.jpg", "gd-8.jpg", "gd-2.jpg", "gd-5.jpg", "gd-6.jpg"]
 
+# ---------------------------------------------------------------- expanded-homepage data
+# Symptom chips -> the most relevant page. Candidates are tried in order against the
+# pages this site actually has, so a site missing a guide still gets a working link.
+SYMPTOMS = [
+    ("Door won't close",             ["/services/garage-door-repair/"]),
+    ("Loud grinding or banging",     ["/guides/noises-that-mean-something/", "/services/garage-door-repair/"]),
+    ("A spring has snapped",         ["/guides/when-a-spring-goes-in-cold-weather/", "/services/garage-door-repair/"]),
+    ("Door came off the track",      ["/guides/why-a-door-goes-off-track/", "/services/garage-door-repair/"]),
+    ("Opener hums, door won't lift", ["/services/garage-door-repair/"]),
+    ("Remote or keypad is dead",     ["/services/garage-door-repair/"]),
+    ("Opens partway, then stops",    ["/services/garage-door-service/", "/services/garage-door-repair/"]),
+    ("Old door - fix or replace?",   ["/guides/what-an-older-door-is-worth-fixing/", "/services/garage-door-installation/"]),
+]
+
+# Door categories for the "styles we install" grid. Product facts only -- nothing here
+# claims a dealership, certification or inventory we can't back on every domain.
+DOOR_TYPES = [
+    ("Insulated steel", "Two- and three-layer steel doors with a polyurethane or polystyrene core - the usual pick for an attached garage."),
+    ("Carriage house", "Swing-out looks on a modern sectional door: overlays, decorative hardware and window inserts."),
+    ("Full-view glass", "Aluminium frames with clear, frosted or tinted glass, for contemporary elevations and shop fronts."),
+    ("Wood and composite", "Cedar, hemlock and composite faces for a period house or a door that has to match a stained entry."),
+    ("Roll-up and commercial", "Slat and sheet roll-up doors for shops, warehouses and detached buildings on heavy daily cycles."),
+    ("Custom and double-wide", "Non-standard openings, double-wide singles and paired doors measured to the opening you actually have."),
+]
+
+REPAIR_SIGNS = ["Panels are straight, sealed and rust-free",
+                "Only the springs, cables or rollers have failed",
+                "The opener is roughly ten years old or newer",
+                "The door still balances and seals at the floor",
+                "One damaged section can still be sourced"]
+REPLACE_SIGNS = ["Several panels are cracked, bowed or rusted through",
+                 "It is single-skin steel with no insulation at all",
+                 "Sections or hardware for it are discontinued",
+                 "You are paying for another repair every year",
+                 "You want a quieter door, or a different look"]
+
+MAINT_TIPS = [
+    ("clock", "Listen once a month",
+     "Run the door with the radio off. New rattles, pops or grinding are early warnings, not background noise."),
+    ("check", "Do the balance test",
+     "Pull the release, lift the door halfway and let go. A balanced door holds; one that drops is a spring problem, not an opener problem."),
+    ("sparkle", "Lubricate, don't grease",
+     "A light garage-door lubricant on the hinges, rollers and spring - never heavy grease, and never on the face of the track."),
+    ("shield", "Test the safety reverse",
+     "Lay a flat board under the door and close it. It should touch and reverse. If it doesn't, stop using the opener."),
+]
+
 def _stable_idx(s, n):
     return (sum(ord(c) for c in s) % n) if n else 0
+
+def uses_expanded(t):
+    """The 17-section homepage is the default for the "garage" design. A site opts out
+    with "home": "classic" (the original 8-section stack) or "home": "showcase"."""
+    return (t.get("template", "garage") or "garage") == "garage" and \
+           t.get("home") not in ("classic", "showcase")
 
 # ---------------------------------------------------------------- brand/photos
 # 30 city hero shots ("<city>_garage_door.webp") + 4 per-service category pools
@@ -54,7 +144,7 @@ def _stable_idx(s, n):
 # photography for every one of the 1000 registered domains -- not just the 10
 # that currently build. assets_shared/photos/gd-*.jpg is now only a fallback for
 # the rare gap (e.g. a city with no hero shot).
-BRAND_PHOTOS = os.path.join(os.path.dirname(ROOT), "brand", "photos")
+BRAND_PHOTOS = _brand_root("photos")
 
 def _brand_list(subdir=""):
     d = os.path.join(BRAND_PHOTOS, subdir)
@@ -63,12 +153,26 @@ def _brand_list(subdir=""):
     except FileNotFoundError:
         return []
 
-# city hero photos, keyed by city slug (filenames are mostly "<slug>_garage_door.webp",
-# with a couple of one-off variants -- "dallas_door.webp", "wheaton_garage_doo.webp").
+# Hero photography lives in brand/photos/GD HERO/:
+#   v1/  30 city-named shots ("<slug>_garage_door.webp", plus one-offs like
+#        "dallas_door.webp" and "wheaton_garage_doo.webp")
+#   v2/  20 generic "garage-door-hero NN.webp" shots, no city in the name
+#
+# So a city with its own shot gets it, and every other city draws from the 20-image
+# generic pool by a hash of its domain. That matters at this scale: the previous set
+# had heroes loose at the top level with no generic pool, so ~970 of the 1000 domains
+# would all have opened with the same single gd-4.jpg.
+HERO_DIRS = ["GD HERO/v1", "GD HERO/v2"]
+
 _CITY_HERO = {}
-for _fn in _brand_list():
-    _base = re.sub(r"_garage_door$|_garage_doo$|_door$|_doo$", "", os.path.splitext(_fn)[0])
-    _CITY_HERO[_base] = _fn
+for _dir in ("GD HERO/v1", ""):          # "" keeps a flat legacy layout working
+    for _fn in _brand_list(_dir):
+        _base = re.sub(r"_garage_door$|_garage_doo$|_door$|_doo$", "", os.path.splitext(_fn)[0])
+        if _base.startswith("garage-door-hero"):
+            continue                      # generic, not a city
+        _CITY_HERO.setdefault(_base, (_dir, _fn))
+
+HERO_POOL = [("GD HERO/v2", f) for f in _brand_list("GD HERO/v2")]
 
 SVC_PHOTO_DIRS = {
     "garage-door-repair": "GD REPAIR",
@@ -76,12 +180,14 @@ SVC_PHOTO_DIRS = {
     "garage-door-service": "GD SERVICE",
 }
 GENERAL_PHOTO_DIRS = ["GD REPAIR", "GD INSTALLATION", "GD SERVICE", "GD MAINTENNANCE"]  # sic: source folder is misspelled
+# the per-topic guide folders are nested inside brand/photos/GD GUIDE/, not at the top
+# level -- without the prefix every guide page silently fell back to generic stock.
 GUIDE_PHOTO_DIRS = {
-    "why-a-door-goes-off-track": "Door Goes Off Track",
-    "doors-on-houses-built-before-insulation-rules": "Doors on Houses Built Before Insulation Rules",
-    "noises-that-mean-something": "Noises",
-    "what-an-older-door-is-worth-fixing": "Older Door Worth Fixing",
-    "when-a-spring-goes-in-cold-weather": "Spring Goes Cold Weather",
+    "why-a-door-goes-off-track": "GD GUIDE/Door Goes Off Track",
+    "doors-on-houses-built-before-insulation-rules": "GD GUIDE/Doors on Houses Built Before Insulation Rules",
+    "noises-that-mean-something": "GD GUIDE/Noises",
+    "what-an-older-door-is-worth-fixing": "GD GUIDE/Older Door Worth Fixing",
+    "when-a-spring-goes-in-cold-weather": "GD GUIDE/Spring Goes Cold Weather",
 }
 
 def _guide_dir_for(slug):
@@ -105,10 +211,14 @@ def select_photos(t, pages, photos_dir):
     to_copy = {}  # dest filename -> source abs path
     fallback_pool = os.path.join(ROOT, "assets_shared", "photos")
 
+    # this city's own shot -> else one of the 20 generic heroes, picked by domain so
+    # neighbouring cities don't land on the same image -> else the shared stock pool
     hero_src = _CITY_HERO.get(slugify(t["city"]))
+    if not hero_src and HERO_POOL:
+        hero_src = HERO_POOL[_stable_idx(t["domain"] + "hero", len(HERO_POOL))]
     if hero_src:
         hero_fn = "hero.webp"
-        to_copy[hero_fn] = os.path.join(BRAND_PHOTOS, hero_src)
+        to_copy[hero_fn] = os.path.join(BRAND_PHOTOS, hero_src[0], hero_src[1])
     else:
         hero_fn = HERO_IMG
         to_copy[hero_fn] = os.path.join(fallback_pool, HERO_IMG)
@@ -148,17 +258,48 @@ def select_photos(t, pages, photos_dir):
             to_copy[dest] = os.path.join(fallback_pool, dest)
         inner_imgs[url] = dest
 
+    # Expanded homepage only: 6 more GD INSTALLATION shots for the door-styles grid
+    # plus one GD MAINTENNANCE shot for the local-context block. Offset from the
+    # service-card picks so the two grids never land on the same photo.
+    door_imgs, ctx_img = [], None
+    if uses_expanded(t):
+        files = _brand_list("GD INSTALLATION")
+        for i in range(len(DOOR_TYPES)):
+            if files:
+                dest = f"door-{i}.webp"
+                fn = files[(_stable_idx(t["domain"] + "door", len(files)) + i * 3) % len(files)]
+                to_copy[dest] = os.path.join(BRAND_PHOTOS, "GD INSTALLATION", fn)
+            else:
+                dest = CARD_IMGS[i % len(CARD_IMGS)]
+                to_copy[dest] = os.path.join(fallback_pool, dest)
+            door_imgs.append(dest)
+        mfiles = _brand_list("GD MAINTENNANCE")
+        if mfiles:
+            ctx_img = "context.webp"
+            to_copy[ctx_img] = os.path.join(BRAND_PHOTOS, "GD MAINTENNANCE",
+                                            mfiles[_stable_idx(t["domain"] + "ctx", len(mfiles))])
+
     for dest, src in to_copy.items():
         try:
             shutil.copy(src, os.path.join(photos_dir, dest))
         except FileNotFoundError:
             pass
 
-    return hero_fn, card_imgs, inner_imgs
+    return hero_fn, card_imgs, inner_imgs, door_imgs, ctx_img
 
 # garage-door-specific CSS (appended after the shared design system; leaves porta-potty untouched)
 GD_CSS = """
 /* ===== garage-door overrides ===== */
+/* Header brand when the logo is a full lockup: no white chip box, no text beside it.
+   Height-constrained with width:auto so a 3:1 wordmark and a 1:1 badge both land at
+   the same optical weight instead of one filling the bar and the other vanishing. */
+.brand--lockup{display:flex;align-items:center;flex:0 0 auto;padding:2px 0}
+.brand--lockup img{height:46px;width:auto;max-width:250px;object-fit:contain;display:block}
+@media(max-width:960px){.brand--lockup img{height:40px;max-width:190px}}
+@media(max-width:560px){.brand--lockup img{height:34px;max-width:150px}}
+/* A square badge logo is a finished shape already -- drop the white chip box and let
+   it sit on the header directly, a touch larger to earn back the padding it loses. */
+.brand__chip--art{width:48px;height:48px;background:none;border:0;box-shadow:none;padding:0}
 /* What We Do — image-overlay service cards with an icon chip */
 .svc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
 .svc-card{position:relative;min-height:322px;border-radius:var(--radius);overflow:hidden;display:flex;align-items:flex-end;box-shadow:var(--shadow);text-decoration:none;isolation:isolate;transition:transform .2s,box-shadow .2s}
@@ -193,12 +334,16 @@ GD_CSS = """
 .gfooter .gf-cta .btn--ghost:hover{background:rgba(255,255,255,.14)}
 .gf-main{padding:56px 0 24px}
 .gf-cols{display:grid;grid-template-columns:1.7fr 1fr 1fr 1.25fr;gap:34px;padding-bottom:32px;border-bottom:1px solid rgba(255,255,255,.1)}
-.gf-cols h4{color:#fff;font-size:.82rem;letter-spacing:.09em;text-transform:uppercase;margin:0 0 14px}
+.gf-cols h3{color:#fff;font-size:.82rem;letter-spacing:.09em;text-transform:uppercase;margin:0 0 14px}
 .gf-cols a{color:#b9c3ce;display:block;padding:5px 0;font-size:.94rem;text-decoration:none}
 .gf-cols a:hover{color:#fff}
 .gf-logo{display:flex;align-items:center;gap:11px;color:#fff;font-family:var(--disp);font-weight:800;font-size:1.2rem;margin-bottom:14px;text-decoration:none}
 .gf-mark{width:42px;height:42px;border-radius:11px;background:#fff;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .gf-logo-img{height:128px;width:auto;max-width:320px;display:block}
+/* The logos are dark artwork on transparency; on this near-black footer they need a
+   light plate behind them or they read as an empty gap. */
+.gf-logo:has(.gf-logo-img){background:#fff;border-radius:16px;padding:12px 20px;
+  box-shadow:0 4px 16px rgba(0,0,0,.28);align-self:flex-start}
 .gf-brand p{font-size:.95rem;max-width:34ch;line-height:1.6;color:#9aa6b2;margin:0}
 .gf-addr{font-style:normal;line-height:1.7;font-size:.94rem;margin-top:12px;color:#9aa6b2}
 .gf-addr a{color:#fff;font-weight:700;text-decoration:none}
@@ -251,6 +396,155 @@ GD_CSS = """
 .contact__cta{display:flex;gap:13px;justify-content:center;flex-wrap:wrap;margin-top:28px}
 @media(max-width:700px){.contact{grid-template-columns:1fr 1fr;gap:22px 16px}}
 @media(max-width:430px){.contact{grid-template-columns:1fr}}
+
+/* ===== expanded homepage ===== */
+/* shared: narrow prose column for JSON-fed copy, and a centred section CTA */
+.prose{max-width:760px}
+.prose p{color:var(--muted);line-height:1.72;margin:0 0 1em}
+.prose ul{color:var(--muted);line-height:1.72;margin:0 0 1em;padding-left:20px}
+.prose--tight{max-width:640px;margin:0 auto}
+.prose--tight p{margin:0}
+.sec-head .prose--tight p{color:var(--muted)}
+.sec-cta{display:flex;justify-content:center;margin-top:30px}
+
+/* symptom finder */
+.syms{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.sym{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:17px 18px;
+  font-family:var(--disp);font-weight:700;font-size:.95rem;color:var(--ink);
+  box-shadow:var(--shadow);text-decoration:none;transition:border-color .18s,transform .18s,box-shadow .18s}
+.sym svg{width:18px;height:18px;fill:none;stroke:var(--accent);stroke-width:2;flex:0 0 auto;transition:transform .18s}
+.sym:hover{border-color:var(--p);transform:translateY(-2px);box-shadow:var(--shadow-lg);text-decoration:none;color:var(--p)}
+.sym:hover svg{transform:translateX(3px)}
+@media(max-width:980px){.syms{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.syms{grid-template-columns:1fr}}
+
+/* local-conditions block (city copy + photo) */
+.ctx{display:grid;grid-template-columns:1.15fr .85fr;gap:44px;align-items:center}
+.ctx__copy h2{font-size:clamp(1.5rem,2.4vw,2.05rem);margin-bottom:.7em}
+.ctx__copy p{color:var(--muted);line-height:1.72;margin:0 0 1em}
+.ctx__copy p:last-child{margin-bottom:0}
+.ctx__img{border-radius:calc(var(--radius) + 4px);overflow:hidden;box-shadow:var(--shadow-lg);align-self:stretch;min-height:330px}
+.ctx__img img{width:100%;height:100%;object-fit:cover;display:block}
+@media(max-width:900px){.ctx{grid-template-columns:1fr;gap:28px}.ctx__img{min-height:250px;order:-1}}
+
+/* repair vs replace */
+.rvr{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.rvr__c{background:#fff;border:1px solid var(--line);border-top:3px solid var(--p);
+  border-radius:var(--radius);box-shadow:var(--shadow);padding:28px 26px}
+.rvr__c--alt{border-top-color:var(--accent)}
+.rvr__c h3{display:flex;align-items:center;gap:11px;margin:0 0 18px;font-size:1.14rem;color:var(--ink)}
+.rvr__c h3 svg{width:22px;height:22px;color:var(--p);flex:0 0 auto}
+.rvr__c--alt h3 svg{color:var(--accent)}
+.rvr__c ul{list-style:none;padding:0;margin:0;display:grid;gap:12px}
+.rvr__c li{display:flex;align-items:flex-start;gap:11px;color:var(--muted);line-height:1.55;font-size:.96rem}
+.rvr__c li svg{width:19px;height:19px;color:var(--accent);flex:0 0 auto;margin-top:2px}
+@media(max-width:820px){.rvr{grid-template-columns:1fr}}
+
+/* door styles grid */
+.dts{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.dt{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  box-shadow:var(--shadow);transition:transform .2s,box-shadow .2s}
+.dt:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
+.dt img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}
+.dt__b{padding:20px 21px 23px}
+.dt__b h3{margin:0 0 8px;font-size:1.12rem;color:var(--ink)}
+.dt__b p{margin:0;color:var(--muted);font-size:.93rem;line-height:1.6}
+@media(max-width:940px){.dts{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.dts{grid-template-columns:1fr}}
+
+/* emergency strip */
+.emerg{background:linear-gradient(135deg,var(--pd),var(--p));color:#fff;padding:30px 0}
+.emerg__in{display:flex;align-items:center;justify-content:space-between;gap:26px;flex-wrap:wrap}
+.emerg__t{display:flex;align-items:center;gap:15px}
+.emerg__t>svg{width:32px;height:32px;color:var(--accent);flex:0 0 auto}
+.emerg__t b{display:block;font-family:var(--disp);font-size:1.16rem;line-height:1.3}
+.emerg__t span{display:block;margin-top:4px;font-size:.93rem;color:rgba(255,255,255,.85)}
+.emerg .btn{background:#fff;color:var(--p);border:0;flex:0 0 auto}
+.emerg .btn:hover{background:var(--accent);color:var(--on-accent)}
+@media(max-width:760px){.emerg__in{flex-direction:column;align-items:flex-start}}
+
+/* maintenance tips */
+.tips{display:grid;grid-template-columns:repeat(4,1fr);gap:22px}
+.tip{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:24px 22px;box-shadow:var(--shadow)}
+.tip__ic{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb, var(--accent) 15%, #fff);color:var(--accent);margin-bottom:15px}
+.tip__ic svg{width:24px;height:24px}
+.tip h3{margin:0 0 8px;font-size:1.04rem;color:var(--ink)}
+.tip p{margin:0;color:var(--muted);font-size:.9rem;line-height:1.6}
+@media(max-width:1000px){.tips{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.tips{grid-template-columns:1fr}}
+
+/* spring-safety callout */
+.safety{display:grid;grid-template-columns:auto 1fr;gap:26px;align-items:start;
+  background:#fff;border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:var(--radius);box-shadow:var(--shadow);padding:32px 34px;max-width:960px;margin:0 auto}
+.safety__ic{width:56px;height:56px;border-radius:15px;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb, var(--accent) 15%, #fff);color:var(--accent);flex:0 0 auto}
+.safety__ic svg{width:30px;height:30px}
+.safety__b h2{font-size:clamp(1.35rem,2vw,1.7rem);margin-bottom:.6em}
+.safety__b p{color:var(--muted);line-height:1.72;margin:0 0 .9em}
+.safety__b p:last-child{margin-bottom:0}
+@media(max-width:640px){.safety{grid-template-columns:1fr;gap:18px;padding:26px 22px}}
+
+/* guides teaser */
+.gcards{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.gcard{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  box-shadow:var(--shadow);text-decoration:none;display:flex;flex-direction:column;transition:transform .2s,box-shadow .2s}
+.gcard:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg);text-decoration:none}
+.gcard img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block}
+.gcard__b{padding:21px 22px 24px;display:flex;flex-direction:column;gap:9px;flex:1}
+.gcard__b h3{margin:0;font-size:1.08rem;color:var(--ink);line-height:1.3}
+.gcard__b p{margin:0;color:var(--muted);font-size:.92rem;line-height:1.58;flex:1}
+.gcard__b .more{display:inline-flex;align-items:center;gap:7px;font-family:var(--disp);font-weight:700;font-size:.89rem;color:var(--p)}
+.gcard__b .more svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;transition:transform .2s}
+.gcard:hover .more svg{transform:translateX(4px)}
+@media(max-width:940px){.gcards{grid-template-columns:1fr}}
+"""
+
+# ===== quote form =====
+# The conversion asset, and the only markup shared verbatim across all four designs --
+# templates.py appends this too, so ironclad/nimbus get the same form styling without
+# pulling in the rest of the garage design system. Deliberately uses only the CSS
+# custom properties every design defines.
+# Every custom property carries a fallback: ironclad/volt/nimbus each define their own,
+# disjoint variable sets (--rule/--brass, --lime/--out, --sky/--soft), so bare var()
+# references would resolve to nothing on three of the four designs.
+QFORM_CSS = """
+.qform{background:var(--card,#fff);border:1px solid var(--line,#e3e8ee);
+  border-radius:var(--radius,16px);box-shadow:var(--shadow-lg,0 12px 40px rgba(16,32,48,.14));
+  padding:clamp(22px,3vw,34px)}
+.qform__grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 18px}
+.qform__f{display:flex;flex-direction:column;gap:6px}
+.qform__f--wide{grid-column:1/-1}
+.qform label{font-family:var(--disp,inherit);font-weight:700;font-size:.88rem;color:var(--ink,#16202b)}
+.qform label .req{color:var(--accent,#c0392b);margin-left:3px}
+.qform input,.qform select,.qform textarea{font:inherit;font-size:1rem;color:var(--ink,#16202b);
+  background:#fff;border:1px solid var(--line,#d8dee6);border-radius:12px;padding:12px 14px;width:100%;
+  transition:border-color .15s,box-shadow .15s}
+.qform input:focus,.qform select:focus,.qform textarea:focus{outline:none;
+  border-color:var(--p,#16202b);box-shadow:0 0 0 3px color-mix(in srgb,var(--p,#16202b) 22%,transparent)}
+.qform input:user-invalid,.qform textarea:user-invalid{border-color:#c0392b}
+.qform textarea{min-height:120px;resize:vertical}
+.qform__hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.qform__foot{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:22px}
+.qform__foot button{flex:0 0 auto;font:inherit;font-family:var(--disp,inherit);font-weight:700;
+  font-size:1rem;cursor:pointer;border:0;border-radius:var(--btn-r,12px);padding:14px 26px;
+  background:var(--accent,#16202b);color:var(--on-accent,#fff)}
+.qform__foot button:hover{filter:brightness(1.07)}
+.qform__note{color:var(--muted,#5b6b7c);font-size:.86rem;margin:0;flex:1;min-width:200px}
+/* shown only when an unconfigured form is submitted, so the placeholder state is
+   visible to whoever is reviewing the page and invisible once form_action is set */
+.qform__pending{flex-basis:100%;margin:6px 0 0;padding:11px 14px;border-radius:10px;
+  background:#fff4e5;border:1px solid #f0c98a;color:#7a4b12;font-size:.88rem}
+.qform__pending code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85em}
+.qform__pending[hidden]{display:none}
+.qform__side{display:flex;flex-direction:column;gap:14px}
+.qform__side .qcard{margin:0}
+.quote-lead{display:grid;grid-template-columns:1.35fr .65fr;gap:34px;align-items:start;
+  padding:44px 0 8px}
+@media(max-width:900px){.quote-lead{grid-template-columns:1fr;gap:26px}
+  .qform__grid{grid-template-columns:1fr}}
 """
 
 # ---------------------------------------------------------------- config
@@ -259,8 +553,13 @@ def load_config():
     sdata = json.load(open(os.path.join(CONFIG, "sites.json"), encoding="utf-8"))
     lpath = os.path.join(CONFIG, "layouts.json")
     layouts = json.load(open(lpath, encoding="utf-8")) if os.path.exists(lpath) else {}
+    # Optional top-level "defaults" object in sites.json, applied under every entry.
+    # This is how one lead-capture endpoint (form_action) or one phone number can be
+    # set for all 1000+ domains at once instead of edited into each of them.
+    defaults = {k: v for k, v in sdata.get("defaults", {}).items() if not k.startswith("_")}
     sites = {}
     for s in sdata["sites"]:
+        s = {**defaults, **s}
         th = themes[s["theme"]]
         t = {k: v for k, v in th.items() if not k.startswith("_")}
         lay = layouts.get(s.get("layout", ""), {})
@@ -274,11 +573,15 @@ def load_config():
             "phone": phone, "tel": "+1" + re.sub(r"\D", "", phone),
             "content": s.get("content", s["city"].lower()),
             "ghl_form_id": s.get("ghl_form_id", ""),
+            # Endpoint the native quote form POSTs to. Empty = no working form; the
+            # build prints a warning and the page falls back to a "how to reach us" block.
+            "form_action": s.get("form_action", ""),
             "port": s.get("port"),
-            # design template ("garage" default; ironclad/volt/nimbus are full alt designs)
+            # design template ("garage" default; ironclad/nimbus are full alt designs)
             "template": s.get("template", "garage"),
-            # showcase homepage variant + its optional, business-supplied trust data
-            "home": s.get("home", "classic"),
+            # homepage stack: "expanded" (default, 17 sections) | "classic" (the original
+            # 8) | "showcase" -- plus the optional, business-supplied trust data below
+            "home": s.get("home", "expanded"),
             "stats": s.get("stats", []), "hours": s.get("hours", ""),
             "email": s.get("email", ""), "rating": s.get("rating", ""), "reviews": s.get("reviews", ""),
         })
@@ -357,6 +660,59 @@ def seo_title(raw):
     raw = (raw or "").strip()
     return raw if len(raw) <= 60 else (raw.split(" | ")[0].strip()[:57].rstrip() + "…")
 
+def home_title(t, pages):
+    """Homepage <title>, guaranteed not to collide with a service page's.
+
+    Several cities' content ships the identical title in both `<city>-home.json` and
+    `<city>-svc-garage-door-repair.json`, which left the homepage and its strongest
+    money page competing for the same query. Fall back to a brand-led title when the
+    authored one is already taken."""
+    home = pages.get("/")
+    taken = {(p.get("title") or "").strip().lower()
+             for u, p in pages.items() if u != "/" and p.get("title")}
+    b, c, st = t["brand"], t["city"], t["st"]
+    candidates = [
+        ((home or {}).get("title") or "").strip(),
+        f"{b} | Garage Door Repair in {c}, {st}",
+        f"{b} | Garage Door Repair & Service",       # for brands too long for the above
+        f"{b} | Garage Door Repair",
+    ]
+    free = [x for x in candidates if x and x.lower() not in taken]
+    # prefer a candidate that also survives the 60-char trim intact
+    return next((x for x in free if len(x) <= 60), free[0] if free else f"Garage Door Repair in {c}, {st}")
+
+# ---------------------------------------------------------------- phone / call-to-action
+# Only 2 of 1001 registered domains carry a phone number today. Rendering the call
+# affordances unconditionally produced `<a href="tel:+1"></a>` -- an empty, unlabelled
+# link that dials nothing -- on roughly six spots per page. Every caller below now goes
+# through these helpers, which fall back to the quote page when there is no number.
+def has_phone(t):
+    """True when this site has a real, dialable number configured."""
+    return bool(re.sub(r"\D", "", t.get("phone") or ""))
+
+def phone_link(t, cls="", with_icon=False):
+    """Bare `<a>` showing the number, or "" when no number is on file."""
+    if not has_phone(t):
+        return ""
+    c = f' class="{cls}"' if cls else ""
+    return f'<a{c} href="tel:{t["tel"]}">{icon("phone") if with_icon else ""}{esc(t["phone"])}</a>'
+
+def _reach(t, form_first=False):
+    """Sentence fragment naming how to reach this business, for hard-coded trust-page
+    prose. Never emits a dangling "Call  ." when no number is configured."""
+    if has_phone(t) and form_first:
+        return f"Call {t['phone']} or use the form above"
+    if has_phone(t):
+        return f"Call {t['phone']}"
+    return "Send us the details" if form_first else "Use the quote form"
+
+def call_cta(t, cls="btn btn--primary", label=None, quote_label="Get a Free Quote"):
+    """The primary "reach us" button: dial it when there's a number, otherwise send
+    the visitor to the quote form, which is the working conversion path either way."""
+    if has_phone(t):
+        return f'<a class="{cls}" href="tel:{t["tel"]}">{icon("phone")}{esc(label or "Call " + t["phone"])}</a>'
+    return f'<a class="{cls}" href="/request-a-quote/">{_svg_mail()}{esc(quote_label)}</a>'
+
 # ---------------------------------------------------------------- content loading
 def load_content(t):
     """Return dict url -> page{cat,h1,title,meta,sections,faq,area_served,slug}."""
@@ -404,14 +760,20 @@ def load_content(t):
 
 # ---------------------------------------------------------------- schema / head
 def org_schema(t):
-    addr = {"@type": "PostalAddress", "streetAddress": t["street"] or t["city"],
-            "addressLocality": t["city"], "addressRegion": t["st"]}
+    # Omit rather than invent: a blank telephone and a streetAddress holding the city
+    # name are both worse than an absent property in LocalBusiness markup.
+    addr = {"@type": "PostalAddress", "addressLocality": t["city"], "addressRegion": t["st"]}
+    if t["street"]:
+        addr["streetAddress"] = t["street"]
     if t["zip"]:
         addr["postalCode"] = t["zip"]
-    return {"@type": ["LocalBusiness", "HomeAndConstructionBusiness"],
-            "@id": f"https://{t['domain']}/#business", "name": t["brand"],
-            "url": f"https://{t['domain']}/", "telephone": t["phone"], "priceRange": "$$",
-            "address": addr, "areaServed": {"@type": "City", "name": f"{t['city']}, {t['st']}"}}
+    org = {"@type": ["LocalBusiness", "HomeAndConstructionBusiness"],
+           "@id": f"https://{t['domain']}/#business", "name": t["brand"],
+           "url": f"https://{t['domain']}/", "priceRange": "$$",
+           "address": addr, "areaServed": {"@type": "City", "name": f"{t['city']}, {t['st']}"}}
+    if has_phone(t):
+        org["telephone"] = t["phone"]
+    return org
 
 def service_schema(t, h1, url):
     return {"@type": "Service", "name": h1, "serviceType": h1,
@@ -436,6 +798,10 @@ def head_html(t, title, desc, url, schemas, og_image=HERO_IMG):
     graph = {"@context": "https://schema.org", "@graph": schemas}
     og = f"https://{t['domain']}/assets/photos/{og_image}" if og_image else ""
     ogtags = (f'<meta property="og:image" content="{og}">\n<meta name="twitter:image" content="{og}">' if og else "")
+    # The hero is the LCP element on every page type -- preload it so it isn't queued
+    # behind the stylesheet and the webfont request.
+    preload = (f'<link rel="preload" as="image" href="/assets/photos/{og_image}" fetchpriority="high">'
+               if og_image else "")
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <script>document.documentElement.classList.add('anim')</script>
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -453,8 +819,9 @@ def head_html(t, title, desc, url, schemas, og_image=HERO_IMG):
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={t['fonts']}&display=swap">
 <link rel="stylesheet" href="/assets/site.css">
+{preload}
 <script type="application/ld+json">{json.dumps(graph)}</script>
-</head><body class="{bodycls}">"""
+</head><body class="{bodycls}"><a class="skip" href="#main">Skip to content</a>"""
 
 # ---------------------------------------------------------------- brand / chrome
 def gdoor_svg(w=40):
@@ -465,43 +832,86 @@ def gdoor_svg(w=40):
             f'<rect x="9" y="11" width="26" height="3" rx="1.5" fill="var(--accent)"/></svg>')
 
 def brand_chip(t, px=40):
-    """Brand emblem: the per-domain logo PNG when present, else the generated SVG mark."""
+    """Brand emblem: the per-domain logo PNG when present, else the generated SVG mark.
+    Sized from the file's real aspect ratio, never forced square."""
     if t.get("has_logo"):
+        w, h = logo_box(t, px)
         return (f'<img src="/assets/logo-emblem.png" alt="{esc(t["brand"])} logo" '
-                f'width="{px}" height="{px}" loading="eager">')
+                f'width="{w}" height="{h}" loading="eager" decoding="async">')
     return gdoor_svg(px)
+
+def is_wide_lockup(t, min_aspect=1.6):
+    """True when the logo is a *horizontal* lockup -- name set beside the mark, so it
+    stays readable at header height and can stand on its own.
+
+    A square badge is also a lockup (the name is drawn inside it), but stacked into
+    a circle or crest it is illegible at 46px -- so those keep the text label and the
+    badge acts as the emblem. Judging this by shape rather than by `kind` is what
+    keeps Mesa's 3:1 wordmark and Naperville's round crest both looking deliberate."""
+    info = t.get("logo") or {}
+    if not t.get("has_logo") or info.get("kind") != "lockup":
+        return False
+    w, h = info.get("w") or 0, info.get("h") or 0
+    return bool(h) and (w / h) >= min_aspect
+
+def brand_lockup(t, h=46):
+    """The clickable brand in the header. Both paths carry the accessible name --
+    alt text on the standalone lockup, visible text alongside the badge."""
+    if is_wide_lockup(t):
+        w, hh = logo_box(t, h)
+        return (f'<a class="brand brand--lockup" href="/">'
+                f'<img src="/assets/logo-emblem.png" alt="{esc(t["brand"])}" '
+                f'width="{w}" height="{hh}" loading="eager" decoding="async"></a>')
+    # A real badge is already a finished shape -- the white chip box is only there to
+    # give the generated SVG mark something to sit on.
+    chip = "brand__chip brand__chip--art" if t.get("has_logo") else "brand__chip"
+    return (f'<a class="brand" href="/"><span class="{chip}">{brand_chip(t, 44)}</span>'
+            f'<span>{esc(t["brand"])}<small>{esc(t["tagline"])}</small></span></a>')
 
 def header(t, pages):
     svc = [p for u, p in pages.items() if p["cat"] == "service"]
     areas = [p for u, p in pages.items() if p["cat"] == "area"]
     guides = [p for u, p in pages.items() if p["cat"] == "guide"]
 
-    def mega(items, all_url=None, all_label=None, cls=""):
+    def mega(items, mid, all_url=None, all_label=None, cls=""):
         links = "".join(f'<a href="{p["url"]}">{esc(area_label(p))}</a>' for p in items)
         allx = f'<a class="mega-all" href="{all_url}">{all_label}</a>' if all_url else ""
-        return f'<div class="mega{cls}">{allx}{links}</div>'
+        return f'<div class="mega{cls}" id="{mid}">{allx}{links}</div>'
+
+    def trigger(label, mid):
+        return (f'<button type="button" aria-expanded="false" aria-controls="{mid}" '
+                f'aria-haspopup="true">{label}</button>')
 
     # Only surface service pages whose label reads like a menu item (short, no "?");
     # the odd marketing-headline page is still reachable via the /services/ index.
     nav_svc = [p for p in svc if "?" not in area_label(p) and len(area_label(p)) <= 32]
     nav = ""
     if nav_svc:
-        nav += f'<div class="nav-item"><button type="button">Services</button>{mega(nav_svc, "/services/", "All Services")}</div>'
+        nav += (f'<div class="nav-item">{trigger("Services", "m-svc")}'
+                f'{mega(nav_svc, "m-svc", "/services/", "All Services")}</div>')
     if areas:
-        nav += f'<div class="nav-item"><button type="button">Service Areas</button>{mega(areas[:18], "/service-areas/", "All Service Areas", " mega--areas")}</div>'
+        nav += (f'<div class="nav-item">{trigger("Service Areas", "m-area")}'
+                f'{mega(areas[:18], "m-area", "/service-areas/", "All Service Areas", " mega--areas")}</div>')
     if guides:
-        nav += f'<div class="nav-item"><button type="button">Guides</button>{mega(guides, "/guides/", "All Guides")}</div>'
+        nav += (f'<div class="nav-item">{trigger("Guides", "m-guide")}'
+                f'{mega(guides, "m-guide", "/guides/", "All Guides")}</div>')
     # About / Contact promoted to real navbar links (visible on desktop and in the mobile menu)
     nav += '<a href="/about/">About</a><a href="/contact/">Contact</a>'
     nav += '<a class="nav-quote" href="/request-a-quote/">Request a Quote</a>'
 
-    return f"""<div class="top"><div class="wrap"><span>Serving {esc(t['city'])} &amp; the surrounding metro</span><span class="dot">&bull;</span><span>Same-day service available</span><span class="tsp"></span><a href="tel:{t['tel']}">{icon('phone')}{esc(t['phone'])}</a></div></div>
+    # The top strip only earns its space when there is actually a number to show.
+    tel = phone_link(t, with_icon=True)
+    topbar = (f'<div class="top"><div class="wrap"><span>Serving {esc(t["city"])} &amp; the surrounding metro</span>'
+              f'<span class="dot">&bull;</span><span>Same-day service available</span>'
+              f'<span class="tsp"></span>{tel}</div></div>') if tel else ""
+
+    return f"""{topbar}
 <header class="site"><div class="wrap hd">
-<a class="brand" href="/"><span class="brand__chip">{brand_chip(t, 40)}</span><span>{esc(t['brand'])}<small>{esc(t['tagline'])}</small></span></a>
-<button class="burger" aria-label="Menu"><span></span><span></span><span></span></button>
-<nav class="main">{nav}</nav>
+{brand_lockup(t)}
+<button class="burger" aria-label="Menu" aria-expanded="false" aria-controls="navmain"><span></span><span></span><span></span></button>
+<nav class="main" id="navmain" aria-label="Main">{nav}</nav>
 <a class="btn btn--primary" href="/request-a-quote/">Free Quote</a>
-</div></header>"""
+</div></header><main id="main">"""
 
 def footer(t, pages):
     svc = [p for u, p in pages.items() if p["cat"] == "service"][:5]
@@ -517,22 +927,31 @@ def footer(t, pages):
     if t.get("has_logo"):
         # real per-domain logo already reads as a full lockup (mark + name) on its
         # own -- no white chip box, no redundant brand-name text next to it.
-        logo = f'<img class="gf-logo-img" src="/assets/logo-emblem.png" alt="{esc(t["brand"])}" loading="lazy">'
+        # width/height must be the file's real dimensions or the browser reserves
+        # the wrong box and the footer jumps as the image lands.
+        lw, lh = logo_box(t, 128)
+        logo = (f'<img class="gf-logo-img" src="/assets/logo-emblem.png" alt="{esc(t["brand"])}" '
+                f'width="{lw}" height="{lh}" loading="lazy" decoding="async">')
     else:
         logo = f'<span class="gf-mark">{brand_chip(t, 30)}</span><span>{esc(t["brand"])}</span>'
+    tel = phone_link(t)
     brand_block = (f'<div class="gf-brand"><a class="gf-logo" href="/">{logo}</a><p>{blurb}</p>'
-                   f'<address class="gf-addr">{addr}<br><a href="tel:{t["tel"]}">{esc(t["phone"])}</a></address></div>')
-    cols = (f'<div><h4>Services</h4>{services}</div><div><h4>Company</h4>{company}</div>'
-            f'<div><h4>Service Areas</h4>{area_links}</div>')
+                   f'<address class="gf-addr">{addr}{"<br>" + tel if tel else ""}</address></div>')
+    # h3, not h4: the last heading before the footer is an h2, and jumping straight
+    # to h4 was the one heading-level skip on every page.
+    cols = (f'<div><h3>Services</h3>{services}</div><div><h3>Company</h3>{company}</div>'
+            f'<div><h3>Service Areas</h3>{area_links}</div>')
     trust = (f'<div class="gf-trust">'
              f'<div>{icon("shield")}<span>Licensed &amp; fully insured</span></div>'
              f'<div>{icon("clock")}<span>Same-day service available</span></div>'
              f'<div>{icon("tag")}<span>Upfront, written pricing</span></div>'
              f'<div>{icon("star")}<span>Local crew, real reviews</span></div></div>')
     legal = (f'<div class="gf-legal"><span>&copy; {date.today().year} {esc(t["brand"])}. All rights reserved.</span>'
-             f'<span>{addr} &middot; <a href="tel:{t["tel"]}">{esc(t["phone"])}</a></span></div>')
+             f'<span>{addr}{" &middot; " + tel if tel else ""}</span></div>')
     js = '<script src="/assets/nav.js" defer></script>'
-    return (f'<footer class="gfooter"><div class="gf-main"><div class="wrap">'
+    # </main> closes the landmark opened at the end of header() -- every garage page is
+    # head_html + header + <body content> + footer, so the pair always balances.
+    return (f'</main><footer class="gfooter"><div class="gf-main"><div class="wrap">'
             f'<div class="gf-cols">{brand_block}{cols}</div>{trust}{legal}</div></div></footer>{js}')
 
 def area_label(p):
@@ -552,8 +971,11 @@ def hero(t, h1, lead, img=HERO_IMG):
     overlap) -- the shared design system (build_site.py's css()) already ships CSS for
     every one of these variants; this was previously hardcoded to "banner" always."""
     variant = t.get("layout", {}).get("hero", "banner")
-    call = f'<a class="btn btn--primary" href="tel:{t["tel"]}">{icon("phone")}Call {esc(t["phone"])}</a>'
-    quote = '<a class="btn btn--ghost" href="/request-a-quote/">Get a Free Quote</a>'
+    # With no number on file the hero would otherwise lead with a dead "Call" button;
+    # drop it and let the quote CTA carry the primary weight instead.
+    call = call_cta(t) if has_phone(t) else ""
+    qcls = "btn btn--ghost" if call else "btn btn--primary"
+    quote = f'<a class="{qcls}" href="/request-a-quote/">Get a Free Quote</a>'
     eyebrow = f'<p class="eyebrow">{esc(t["city"])}, {esc(t["st"])} &middot; Garage Door Service</p>'
     leadh = f'<p class="lead">{esc(lead)}</p>'
     chips = ('<ul class="chips">'
@@ -563,17 +985,17 @@ def hero(t, h1, lead, img=HERO_IMG):
     src = f'/assets/photos/{img}'
     alt = f'Garage door service in {esc(t["city"])}, {esc(t["st"])}'
     badge = f'<div class="hero__badge">{icon("shield")}<div><b>Licensed</b><span>&amp; insured crew</span></div></div>'
-    media = f'<div class="hero__media"><img src="{src}" alt="{alt}" fetchpriority="high">{badge}</div>'
+    media = f'<div class="hero__media"><img src="{src}" alt="{alt}" width="1200" height="900" fetchpriority="high" decoding="async">{badge}</div>'
 
     if variant == "split-left":
         return f'<section class="hero hero--split hero--left"><div class="wrap">{media}{copy}</div></section>'
     if variant == "stacked":
-        wide = f'<div class="hero__media--wide"><img src="{src}" alt="{alt}" fetchpriority="high"></div>'
+        wide = f'<div class="hero__media--wide"><img src="{src}" alt="{alt}" width="1600" height="900" fetchpriority="high" decoding="async"></div>'
         return f'<section class="hero hero--stacked"><div class="wrap">{copy}{wide}</div></section>'
     if variant == "center":
         return f'<section class="hero hero--center" style="--hero-bg:url({src})"><div class="wrap">{copy}</div></section>'
     if variant == "overlap":
-        return (f'<section class="hero hero--overlap"><div class="hero__bgimg"><img src="{src}" alt="{alt}" fetchpriority="high"></div>'
+        return (f'<section class="hero hero--overlap"><div class="hero__bgimg"><img src="{src}" alt="{alt}" width="1600" height="900" fetchpriority="high" decoding="async"></div>'
                 f'<div class="wrap"><div class="hero__card">{copy}</div></div></section>')
     if variant == "split-right":
         return f'<section class="hero hero--split hero--right"><div class="wrap">{copy}{media}</div></section>'
@@ -603,7 +1025,7 @@ def services_grid(t, pages):
     if style == "bold":
         cards = "".join(
             f'<a class="svc-card" href="{url}">'
-            f'<img src="/assets/photos/{img}" alt="{title} in {esc(t["city"])}" loading="lazy">'
+            f'<img src="/assets/photos/{img}" alt="{title} in {esc(t["city"])}" width="1200" height="900" loading="lazy" decoding="async">'
             f'<div class="svc-card__ic">{icon(ic)}</div>'
             f'<div class="svc-card__b"><h3>{title}</h3><p>{blurb}</p>'
             f'<span class="more">Learn more {icon("arrow")}</span></div></a>'
@@ -612,7 +1034,7 @@ def services_grid(t, pages):
     else:
         cards = "".join(
             f'<a class="scard" href="{url}">'
-            f'<img src="/assets/photos/{img}" alt="{title} in {esc(t["city"])}" loading="lazy">'
+            f'<img src="/assets/photos/{img}" alt="{title} in {esc(t["city"])}" width="1200" height="900" loading="lazy" decoding="async">'
             f'<div class="scard__b"><h3>{title}</h3><p>{blurb}</p>'
             f'<span class="more">Learn more {icon("arrow")}</span></div></a>'
             for ic, title, blurb, url, img in items)
@@ -634,10 +1056,13 @@ def why_us(t):
             f'<p class="eyebrow">Why {esc(t["city"])} Calls Us</p><h2>Straight answers, honest fixes</h2></div>'
             f'<div class="grid g3 feats feats--{t["layout"]["feats"]}">{cells}</div></div></section>')
 
-def how_it_works(t):
+def how_it_works(t, intro=""):
+    """`intro` is the city's own 'how_a_call_goes' copy from the home JSON when the
+    site opts into the expanded homepage; the 3 steps below stay generic."""
     style = t["layout"]["steps"]
+    lead = f'<div class="prose prose--tight">{render_body(intro)}</div>' if intro else ""
     return (f'<section class="sec sec--soft"><div class="wrap"><div class="sec-head">'
-            f'<p class="eyebrow">How It Works</p><h2>Getting your door fixed is simple</h2></div>'
+            f'<p class="eyebrow">How It Works</p><h2>Getting your door fixed is simple</h2>{lead}</div>'
             f'<div class="steps steps--{style}">'
             f'<div class="step"><div class="step__b"><h3>Tell us the symptom</h3><p>Call or request a quote and describe what the door is doing — noise, off-track, won\'t open.</p></div></div>'
             f'<div class="step"><div class="step__b"><h3>On-site diagnosis</h3><p>A tech inspects the springs, tracks, opener and panels and gives you a written price first.</p></div></div>'
@@ -672,7 +1097,7 @@ def why_us_split(t):
             f'Every job is handled by a vetted technician, never a subcontractor, and priced upfront before any work starts.</p>'
             f'<p>From the first call to the final test, you get straight answers, clean workmanship, and a warranty that actually means something.</p>'
             f'<ul class="checklist">{li}</ul></div>'
-            f'<div class="whyx__img"><img src="/assets/photos/{img}" alt="Garage door service in {esc(t["city"])}" loading="lazy">{badge}</div>'
+            f'<div class="whyx__img"><img src="/assets/photos/{img}" alt="Garage door service in {esc(t["city"])}" width="1200" height="900" loading="lazy" decoding="async">{badge}</div>'
             f'</div>{stats_band(t)}</div></section>')
 
 def _svg_mail():
@@ -686,8 +1111,7 @@ def _svg_pin():
 def contact_band(t):
     """Homepage 'Book Your Service Today' block: call / hours / email / service area."""
     hours = t.get("hours") or "Mon-Sat, 7am-7pm"
-    phone_cell = (f'<a href="tel:{t["tel"]}">{esc(t["phone"])}</a>' if t.get("phone")
-                  else '<a href="/request-a-quote/">Request a callback</a>')
+    phone_cell = phone_link(t) or '<a href="/request-a-quote/">Request a callback</a>'
     email_cell = (f'<div class="contact__c"><span class="lbl">{_svg_mail()}Email</span>'
                   f'<a href="mailto:{esc(t["email"])}">{esc(t["email"])}</a></div>') if t.get("email") else ""
     return (f'<section class="sec sec--contact"><div class="wrap"><div class="sec-head">'
@@ -700,25 +1124,166 @@ def contact_band(t):
             f'<div class="contact__c"><span class="lbl">{_svg_pin()}Service area</span>'
             f'<span class="v">{esc(t["city"])}, {esc(t["st"])} &amp; nearby</span></div></div>'
             f'<div class="contact__cta"><a class="btn btn--primary" href="/request-a-quote/">Get a Free Quote</a>'
-            f'<a class="btn btn--ghost" href="tel:{t["tel"]}">{icon("phone")}Call now</a></div>'
+            f'{call_cta(t, "btn btn--ghost", label="Call now") if has_phone(t) else ""}</div>'
             f'</div></section>')
 
-def areas_band(t, pages):
+# ---- expanded-homepage sections --------------------------------------------
+# Ten sections that take the homepage from 8 body blocks to 18. Four of them render
+# the per-city copy that already ships in every home JSON (`sections[]`) and that the
+# original homepage silently discarded; the rest are static but niche-true -- no
+# invented reviews, counts, awards or certifications.
+def _first_url(pages, cands, fallback="/request-a-quote/"):
+    """First candidate URL this site actually has, else a page that always exists."""
+    for u in cands:
+        if u in pages:
+            return u
+    return fallback
+
+def _home_sec(home, *keys):
+    """Body text of the first home JSON section whose h2 matches one of `keys`
+    (snake_case). Keys are tried in order, so the real content shape wins and the
+    seeded demo shape (`what_we_do` / `why_local_matters`) is a fallback. Returns ""
+    when a city has none of them, and the calling section then renders nothing."""
+    for k in keys:
+        for s in (home or {}).get("sections", []):
+            if slugify(s.get("h2", "")).replace("-", "_") == k:
+                return s.get("body", "")
+    return ""
+
+def symptom_finder(t, pages):
+    """Symptom chips -> the page that explains that symptom. Pure internal linking:
+    every chip resolves against pages this site really has."""
+    chips = "".join(f'<a class="sym" href="{_first_url(pages, cands)}">'
+                    f'<span>{esc(label)}</span>{icon("arrow")}</a>'
+                    for label, cands in SYMPTOMS)
+    return (f'<section class="sec"><div class="wrap"><div class="sec-head">'
+            f'<p class="eyebrow">Start Here</p><h2>What is your door doing?</h2>'
+            f'<p>Pick the closest symptom and read what usually causes it - or call and describe it to a tech.</p></div>'
+            f'<div class="syms">{chips}</div></div></section>')
+
+def local_context(t, home):
+    """City-specific housing/climate copy from the home JSON, beside a photo."""
+    body = _home_sec(home, "the_area_and_its_housing", "why_local_matters")
+    if not body:
+        return ""
+    img = t.get("ctx_img") or (t.get("card_imgs") or CARD_IMGS)[-1]
+    return (f'<section class="sec sec--soft"><div class="wrap"><div class="ctx">'
+            f'<div class="ctx__copy"><p class="eyebrow">Local Conditions</p>'
+            f'<h2>Garage doors in {esc(t["city"])}, {esc(t["st"])}</h2>{render_body(body)}</div>'
+            f'<div class="ctx__img"><img src="/assets/photos/{img}" '
+            f'alt="Garage door work in {esc(t["city"])}, {esc(t["st"])}" width="1200" height="900" loading="lazy" decoding="async"></div>'
+            f'</div></div></section>')
+
+def fix_most_here(t, home):
+    """City-specific 'what actually breaks around here' copy from the home JSON."""
+    body = _home_sec(home, "what_we_fix_most_here")
+    if not body:
+        return ""
+    return (f'<section class="sec sec--soft"><div class="wrap"><div class="prose">'
+            f'<p class="eyebrow">On The Trucks</p><h2>What we fix most in {esc(t["city"])}</h2>'
+            f'{render_body(body)}</div></div></section>')
+
+def repair_vs_replace(t):
+    rep = "".join(f'<li>{icon("check")}{esc(s)}</li>' for s in REPAIR_SIGNS)
+    rpl = "".join(f'<li>{icon("check")}{esc(s)}</li>' for s in REPLACE_SIGNS)
+    return (f'<section class="sec"><div class="wrap"><div class="sec-head">'
+            f'<p class="eyebrow">Straight Answer</p><h2>Repair it, or replace it?</h2>'
+            f'<p>Nobody should be sold a whole new door for a broken spring. Here is how the call actually gets made.</p></div>'
+            f'<div class="rvr">'
+            f'<div class="rvr__c"><h3>{icon("tag")}Repair usually wins when</h3><ul>{rep}</ul></div>'
+            f'<div class="rvr__c rvr__c--alt"><h3>{icon("calendar")}Replacement usually wins when</h3><ul>{rpl}</ul></div>'
+            f'</div></div></section>')
+
+def door_types(t, pages):
+    imgs = t.get("door_imgs") or t.get("card_imgs") or CARD_IMGS
+    tiles = "".join(f'<article class="dt">'
+                    f'<img src="/assets/photos/{imgs[i % len(imgs)]}" '
+                    f'alt="{esc(name)} garage door in {esc(t["city"])}" width="1200" height="900" loading="lazy" decoding="async">'
+                    f'<div class="dt__b"><h3>{esc(name)}</h3><p>{esc(blurb)}</p></div></article>'
+                    for i, (name, blurb) in enumerate(DOOR_TYPES))
+    url = _first_url(pages, ["/services/garage-door-installation/", "/services/"])
+    return (f'<section class="sec"><div class="wrap"><div class="sec-head">'
+            f'<p class="eyebrow">New Doors</p><h2>Door styles we install</h2>'
+            f'<p>Measured to your opening and specified for the local heat load - not whatever happens to be on the truck.</p></div>'
+            f'<div class="dts">{tiles}</div>'
+            f'<div class="sec-cta"><a class="btn btn--primary" href="{url}">Talk about a new door</a></div>'
+            f'</div></section>')
+
+def emergency_strip(t):
+    ask = "call" if has_phone(t) else "send it through"
+    return (f'<section class="emerg"><div class="wrap emerg__in">'
+            f'<div class="emerg__t">{icon("clock")}<div>'
+            f'<b>Door stuck open, or a spring already gone?</b>'
+            f'<span>Neither one waits for an appointment window - {ask} and we will move the job up the list.</span>'
+            f'</div></div>'
+            f'{call_cta(t, "btn", quote_label="Request urgent service")}'
+            f'</div></section>')
+
+def maintenance_tips(t):
+    cells = "".join(f'<div class="tip"><div class="tip__ic">{icon(ic)}</div>'
+                    f'<h3>{esc(h)}</h3><p>{esc(d)}</p></div>' for ic, h, d in MAINT_TIPS)
+    return (f'<section class="sec"><div class="wrap"><div class="sec-head">'
+            f'<p class="eyebrow">Make It Last</p><h2>Four checks that prevent most callouts</h2>'
+            f'<p>None of these need tools, and all four take under a minute.</p></div>'
+            f'<div class="tips">{cells}</div></div></section>')
+
+def safety_callout(t):
+    return (f'<section class="sec sec--soft"><div class="wrap"><div class="safety">'
+            f'<div class="safety__ic">{icon("shield")}</div><div class="safety__b">'
+            f'<p class="eyebrow">Please Read</p><h2>The one job we ask you not to do yourself</h2>'
+            f'<p>A torsion spring stores enough energy to lift a door that weighs about as much as you do, '
+            f'and it lets go of all of it the moment a winding bar slips. Spring replacement is the most '
+            f'common source of serious injury in this trade, and it is the one repair we tell every '
+            f'homeowner in {esc(t["city"])} to hand over.</p>'
+            f'<p>Plenty of the rest is fair game for a confident DIYer. This one is not.</p>'
+            f'</div></div></div></section>')
+
+def guides_teaser(t, pages):
+    """Three guide pages on the homepage - the content already exists and was only
+    reachable from the nav and the /guides/ index."""
+    guides = [p for u, p in pages.items() if p["cat"] == "guide"][:3]
+    if not guides:
+        return ""
+    inner = t.get("inner_imgs") or {}
+    cards = ""
+    for p in guides:
+        img = inner.get(p["url"]) or INNER_IMGS[_stable_idx(p["slug"] or p["url"], len(INNER_IMGS))]
+        cards += (f'<a class="gcard" href="{p["url"]}">'
+                  f'<img src="/assets/photos/{img}" alt="{esc(area_label(p))}" width="1200" height="900" loading="lazy" decoding="async">'
+                  f'<div class="gcard__b"><h3>{esc(area_label(p))}</h3>'
+                  f'<p>{esc((p["meta"] or "").split(".")[0])}</p>'
+                  f'<span class="more">Read the guide {icon("arrow")}</span></div></a>')
+    return (f'<section class="sec sec--soft"><div class="wrap"><div class="sec-head">'
+            f'<p class="eyebrow">Good to Know</p><h2>Plain-English garage door guides</h2>'
+            f'<p>What actually goes wrong, why it goes wrong, and what it takes to put right.</p></div>'
+            f'<div class="gcards">{cards}</div>'
+            f'<div class="sec-cta"><a class="btn btn--outline" href="/guides/">All guides {icon("arrow")}</a></div>'
+            f'</div></section>')
+
+def areas_band(t, pages, prose=""):
+    """`prose` is the city's own 'areas_we_cover' copy from the home JSON, which
+    replaces the generic one-liner when the site opts into the expanded homepage."""
     areas = [p for u, p in pages.items() if p["cat"] == "area"]
     if not areas:
         return ""
     chips = "".join(f'<a href="{p["url"]}">{esc(area_label(p))}</a>' for p in areas[:16])
+    blurb = (f'<div class="prose prose--tight">{render_body(prose)}</div>' if prose else
+             '<p>Neighborhoods across the city and suburbs around the metro. Not sure if we reach you? Just ask.</p>')
     return (f'<section class="sec"><div class="wrap"><div class="sec-head">'
             f'<p class="eyebrow">Where We Work</p><h2>Serving {esc(t["city"])} &amp; nearby communities</h2>'
-            f'<p>Neighborhoods across the city and suburbs around the metro. Not sure if we reach you? Just ask.</p></div>'
+            f'{blurb}</div>'
             f'<div class="areas">{chips}<a class="areas__all" href="/service-areas/">View all areas {icon("arrow")}</a></div></div></section>')
 
 def cta_band(t, heading=None):
     heading = heading or f"Need a garage door fixed in {t['city']}?"
+    if has_phone(t):
+        lead = "Call now or request a free quote — same-day service on most repairs, upfront written pricing."
+        cta = call_cta(t) + '<a class="btn btn--ghost" href="/request-a-quote/">Request a Quote</a>'
+    else:
+        lead = "Send us the details and we will come back with a written price — same-day service on most repairs."
+        cta = '<a class="btn btn--primary" href="/request-a-quote/">Request a Quote</a>'
     return (f'<section class="sec"><div class="wrap"><div class="cta-band"><h2>{esc(heading)}</h2>'
-            f'<p>Call now or request a free quote — same-day service on most repairs, upfront written pricing.</p>'
-            f'<div class="cta"><a class="btn btn--primary" href="tel:{t["tel"]}">{icon("phone")}Call {esc(t["phone"])}</a>'
-            f'<a class="btn btn--ghost" href="/request-a-quote/">Request a Quote</a></div></div></div></section>')
+            f'<p>{lead}</p><div class="cta">{cta}</div></div></div></section>')
 
 def home_faqs(t):
     c = t["city"]
@@ -741,20 +1306,44 @@ def home_page(t, pages):
         f"Local garage door repair, spring and opener service and new-door installation across {t['city']} "
         f"and the surrounding metro — same-day service, licensed techs, upfront pricing.")
     faqs = home["faq"] if (home and home["faq"]) else home_faqs(t)
-    faq_html = (f'<section class="sec sec--soft"><div class="wrap"><div class="sec-head">'
+    # the expanded stack already has a soft band either side of the FAQ, so it runs plain there
+    faq_cls = "sec" if uses_expanded(t) else "sec sec--soft"
+    faq_html = (f'<section class="{faq_cls}"><div class="wrap"><div class="sec-head">'
                 f'<p class="eyebrow">Good to Know</p><h2>Frequently asked questions</h2></div>'
                 f'<div class="faq">{faq_accordion(faqs)}</div></div></section>')
-    title = seo_title((home["title"] if home else "") or f"Garage Door Repair in {t['city']}, {t['st']} | {t['brand']}")
+    title = seo_title(home_title(t, pages))
     desc = (home["meta"] if home else "") or lead
     schemas = [org_schema(t), faq_schema(faqs)]
     hero_img = t.get("hero_img") or HERO_IMG
     top = (head_html(t, title, desc, "/", schemas, og_image=hero_img) + header(t, pages)
            + hero(t, h1, lead, img=hero_img) + trust_bar())
-    if t.get("home") == "showcase":
+    if uses_expanded(t):
+        # DEFAULT stack: 15 body sections after the hero + trust bar. Four of them
+        # (local_context, fix_most_here, the how-it-works intro and the areas prose)
+        # render the per-city copy from the home JSON, so no two cities share this
+        # page's text; each renders nothing if that city's JSON lacks the section.
+        # contact_band() is deliberately not here -- it duplicated the closing CTA.
+        mid = (services_grid(t, pages)                                  # soft
+               + symptom_finder(t, pages)                               # plain
+               + local_context(t, home)                                 # soft   <- city copy
+               + why_us_split(t)                                        # plain
+               + fix_most_here(t, home)                                 # soft   <- city copy
+               + repair_vs_replace(t)                                   # plain
+               + how_it_works(t, _home_sec(home, "how_a_call_goes"))     # soft   <- city copy
+               + door_types(t, pages)                                   # plain
+               + emergency_strip(t)                                     # accent
+               + maintenance_tips(t)                                    # plain
+               + safety_callout(t)                                      # soft
+               + areas_band(t, pages, _home_sec(home, "areas_we_cover"))  # plain <- city copy
+               + guides_teaser(t, pages)                                # soft
+               + faq_html                                               # plain
+               + cta_band(t))                                           # plain
+    elif t.get("home") == "showcase":
         # contact_band() helper kept in code for reuse, but not rendered on the page
         mid = (why_us_split(t) + services_grid(t, pages) + how_it_works(t)
                + areas_band(t, pages) + faq_html + cta_band(t))
     else:
+        # "classic": the original 8-section stack, kept for sites that want it short
         mid = (services_grid(t, pages) + why_us(t) + how_it_works(t)
                + areas_band(t, pages) + faq_html + cta_band(t))
     return top + mid + footer(t, pages) + "</body></html>"
@@ -767,7 +1356,7 @@ def inner_page(t, p, pages):
         h2 = sec.get("h2", "")
         parts.append(f'<h2 id="{slugify(h2)}">{esc(humanize_heading(h2))}</h2>{render_body(sec.get("body", ""))}')
         if idx == 0:
-            parts.append(f'<img src="/assets/photos/{img}" alt="{esc(h1)}" loading="lazy">')
+            parts.append(f'<img src="/assets/photos/{img}" alt="{esc(h1)}" width="1200" height="900" loading="lazy" decoding="async">')
     if p["faq"]:
         parts.append(f'<h2 id="faq">Frequently asked questions</h2><div class="faq">{faq_accordion(p["faq"])}</div>')
 
@@ -776,7 +1365,7 @@ def inner_page(t, p, pages):
     crumb = f'<div class="crumb"><a href="/">Home</a> › <a href="{parent}">{label}</a> › {esc(h1)}</div>'
     aside = (f'<aside class="aside"><div class="qcard">{icon("phone")}<h3>Get a free quote</h3>'
              f'<p>Fast answers and real pricing for {esc(t["city"])} garage door work.</p>'
-             f'<a class="tel" href="tel:{t["tel"]}">{esc(t["phone"])}</a>'
+             f'{phone_link(t, cls="tel")}'
              f'<a class="btn btn--primary" href="/request-a-quote/">Request a Quote</a>'
              f'<a class="btn btn--outline" href="/service-areas/">Service Areas</a></div></aside>')
     body = (f'<section class="page-hero"><div class="wrap">{crumb}<h1>{esc(h1)}</h1></div></section>'
@@ -809,18 +1398,86 @@ def index_page(t, pages, cat, url, title_h1, eyebrow, blurb):
     return (head_html(t, seo_title(f"{title_h1} | {t['brand']}"), blurb, url, schemas, og_image=t.get("hero_img") or HERO_IMG)
             + header(t, pages) + body + footer(t, pages) + "</body></html>")
 
+SERVICE_OPTIONS = ["Garage door repair", "New door installation", "Spring replacement",
+                   "Opener repair or replacement", "Off-track door or cable",
+                   "Service / tune-up", "Something else"]
+
+def quote_form(t):
+    """The site's lead-capture form. Native HTML: no JS required, works on any host,
+    and POSTs to whatever `form_action` names.
+
+    The form always renders, so the quote page is never a dead end and the layout is
+    reviewable before an endpoint exists. Until `form_action` is set the form is
+    *inert*: it carries no action, and a submit shows an inline notice instead of
+    posting. That is deliberate -- a form that silently POSTs into the void looks
+    identical to a working one while dropping every lead. Set `form_action` (per site,
+    or once in the `defaults` block of config/sites.json) and the same markup becomes
+    live with no other change."""
+    action = (t.get("form_action") or "").strip()
+    live = bool(action)
+    opts = "".join(f'<option>{esc(o)}</option>' for o in SERVICE_OPTIONS)
+    city = esc(f'{t["city"]}, {t["st"]}')
+    attrs = f' method="post" action="{esc(action)}"' if live else ' data-unconfigured="1"'
+    return (f'<form class="qform"{attrs} novalidate>'
+            # Identify which of the ~1000 domains a submission came from.
+            f'<input type="hidden" name="site" value="{esc(t["domain"])}">'
+            f'<input type="hidden" name="city" value="{city}">'
+            # Honeypot: bots fill it, humans never see it. Reject on the receiving end.
+            f'<div class="qform__hp" aria-hidden="true"><label for="q-company">Company</label>'
+            f'<input id="q-company" name="company" type="text" tabindex="-1" autocomplete="off"></div>'
+            f'<div class="qform__grid">'
+            f'<div class="qform__f"><label for="q-name">Your name<span class="req">*</span></label>'
+            f'<input id="q-name" name="name" type="text" autocomplete="name" required></div>'
+            f'<div class="qform__f"><label for="q-phone">Phone<span class="req">*</span></label>'
+            f'<input id="q-phone" name="phone" type="tel" autocomplete="tel" required></div>'
+            f'<div class="qform__f"><label for="q-email">Email</label>'
+            f'<input id="q-email" name="email" type="email" autocomplete="email"></div>'
+            f'<div class="qform__f"><label for="q-zip">Service address or ZIP</label>'
+            f'<input id="q-zip" name="address" type="text" autocomplete="street-address"></div>'
+            f'<div class="qform__f qform__f--wide"><label for="q-service">What do you need?</label>'
+            f'<select id="q-service" name="service">{opts}</select></div>'
+            f'<div class="qform__f qform__f--wide"><label for="q-notes">Tell us what the door is doing</label>'
+            f'<textarea id="q-notes" name="notes" '
+            f'placeholder="e.g. it opens about a foot then stops, and there is a loud bang from the spring"></textarea></div>'
+            f'</div>'
+            f'<div class="qform__foot"><button class="btn btn--primary" type="submit">Request my free quote</button>'
+            f'<p class="qform__note">No obligation. We use your details only to quote this job.</p>'
+            f'<p class="qform__pending" role="status" hidden>This form is not connected to an inbox yet. '
+            f'Set <code>form_action</code> in config/sites.json to start receiving these.</p></div>'
+            + ("" if live else
+               '<script>(function(){var f=document.currentScript.parentNode;'
+               'f.addEventListener("submit",function(e){e.preventDefault();'
+               'var n=f.querySelector(".qform__pending");if(n)n.hidden=false;});})();</script>')
+            + '</form>')
+
 def trust_page(t, pages, url, h1, blocks, is_quote=False):
     parts = "".join(f'<h2>{esc(h)}</h2><p>{esc(b)}</p>' for h, b in blocks)
-    embed = ""
-    if is_quote and t.get("ghl_form_id"):
-        from build_site import quote_embed
-        embed = quote_embed(t["ghl_form_id"])
     crumb = f'<div class="crumb"><a href="/">Home</a> › {esc(h1)}</div>'
+    tel = phone_link(t, cls="tel")
     aside = (f'<aside class="aside"><div class="qcard">{icon("phone")}<h3>Talk to us</h3>'
-             f'<p>Garage door help in {esc(t["city"])}, {esc(t["st"])}.</p>'
-             f'<a class="tel" href="tel:{t["tel"]}">{esc(t["phone"])}</a>'
+             f'<p>Garage door help in {esc(t["city"])}, {esc(t["st"])}.</p>{tel}'
              f'<a class="btn btn--primary" href="/request-a-quote/">Request a Quote</a></div></aside>')
-    body = (f'<section class="page-hero"><div class="wrap">{crumb}<h1>{esc(h1)}</h1></div></section>{embed}'
+
+    # The quote page leads with the form itself; everything else stays prose-first.
+    # A configured GHL embed wins over the native form; otherwise the native form
+    # always renders (inert until form_action is set -- see quote_form). This used to
+    # test `not form` first, which now that the form always renders would have meant
+    # the GHL embed could never appear.
+    lead = ""
+    if is_quote:
+        if t.get("ghl_form_id"):
+            from build_site import quote_embed
+            lead = quote_embed(t["ghl_form_id"])
+        else:
+            side = (# h2, not h3: this card sits directly under the page h1. It only ever rendered
+                    # when a form endpoint was configured, so the level skip it introduces
+                    # surfaced the moment the form started rendering unconditionally.
+                    f'<div class="qform__side"><div class="qcard">{icon("clock")}<h2>What happens next</h2>'
+                    f'<p>We read every request the same day and come back with a written price '
+                    f'— not a range, and no visit needed for most repairs.</p>{tel}</div></div>')
+            lead = f'<div class="wrap"><div class="quote-lead">{quote_form(t)}{side}</div></div>'
+
+    body = (f'<section class="page-hero"><div class="wrap">{crumb}<h1>{esc(h1)}</h1></div></section>{lead}'
             f'<div class="wrap"><div class="article"><div class="body">{parts}</div>{aside}</div></div>'
             + cta_band(t))
     schemas = [org_schema(t), breadcrumb_schema(t, [("Home", "/"), (h1, url)])]
@@ -831,7 +1488,7 @@ def trust_page(t, pages, url, h1, blocks, is_quote=False):
 # ---------------------------------------------------------------- renderer dispatch
 # The default "garage" design is the module functions above. Alternate full designs
 # (ironclad / volt / nimbus) live in templates.py and expose the same interface.
-GARAGE = {"css": lambda t: css(t) + GD_CSS, "navjs": NAVJS,
+GARAGE = {"css": lambda t: css(t) + GD_CSS + QFORM_CSS, "navjs": NAVJS,
           "home": lambda t, pages: home_page(t, pages),
           "inner": lambda t, p, pages: inner_page(t, p, pages),
           "index": lambda t, pages, cat, url, h1, eb, bl: index_page(t, pages, cat, url, h1, eb, bl),
@@ -858,10 +1515,15 @@ def write(out, url, htmlstr):
 def build():
     if os.path.exists(DIST):
         shutil.rmtree(DIST)
+    no_lead, built = [], 0
     for domain, t in SITES.items():
         if not os.path.isdir(os.path.join(CONTENT, t["content"])):
             print(f"  skip {domain}: content/{t['content']}/ not found (add content, then rebuild)")
             continue
+        # A site with neither a phone number nor a form endpoint renders correctly but
+        # gives a visitor no way to make contact. Worth saying out loud, per build.
+        if not has_phone(t) and not (t.get("form_action") or t.get("ghl_form_id")):
+            no_lead.append(domain)
         R = get_renderer(t)
         out = os.path.join(DIST, domain)
         assets = os.path.join(out, "assets")
@@ -878,6 +1540,7 @@ def build():
 
         # per-domain brand logo (from brand/logos/); falls back to the inline SVG if absent
         t["has_logo"] = False
+        t["logo"] = dict(LOGO_INFO.get(domain) or {"kind": "mark"})
         for src, dst in ((f"{domain}-emblem.png", "logo-emblem.png"),
                          (f"{domain}-emblem-light.png", "logo-emblem-light.png"),
                          (f"{domain}-lockup.png", "logo-lockup.png"),
@@ -902,7 +1565,8 @@ def build():
         # exists) + on-topic photos for every service tile and inner page. Used by
         # the default "garage" design (falls back to the pool above only where
         # brand/photos has no match).
-        t["hero_img"], t["card_imgs"], t["inner_imgs"] = select_photos(t, pages, photos)
+        (t["hero_img"], t["card_imgs"], t["inner_imgs"],
+         t["door_imgs"], t["ctx_img"]) = select_photos(t, pages, photos)
         # inner content pages
         for url, p in pages.items():
             if p["cat"] == "home":
@@ -938,13 +1602,13 @@ def build():
             ("Licensed, insured, and accountable",
              f"Our techs are trained on the tools this work actually requires. Torsion springs are wound under enough tension to cause serious injury, and replacing one is the single job we always tell homeowners never to DIY. We carry proper insurance and stand behind the work, and because we live and work in {t['city']}, our reputation here is the whole business - which is why the crew treats every door like it belongs to a neighbor, because more often than not it does."),
             ("Ready when you are",
-             f"Whether it's a door that won't open this morning or a replacement you've been putting off, {t['brand']} is one call away. Reach us at {t['phone']} for same-day service on most repairs, or request a written quote and we'll tell you honestly what your door needs - nothing more."),
+             f"Whether it's a door that won't open this morning or a replacement you've been putting off, {t['brand']} is one call away. {_reach(t)} for same-day service on most repairs, or request a written quote and we'll tell you honestly what your door needs - nothing more."),
         ]))
         write(out, "/contact/", R["trust"](t, pages, "/contact/", f"Contact {t['brand']}", [
-            ("Get in touch", f"Call {t['phone']} to reach {t['brand']} for garage door repair, service or a new-door quote in {t['city']}, {t['st']}."),
-            ("Service area", f"We serve {t['city']} and the surrounding suburbs. Not sure if you're in range? Call and ask — we'll tell you straight.")]))
+            ("Get in touch", f"{_reach(t)} to reach {t['brand']} for garage door repair, service or a new-door quote in {t['city']}, {t['st']}."),
+            ("Service area", f"We serve {t['city']} and the surrounding suburbs. Not sure if you're in range? Ask when you get in touch — we'll tell you straight.")]))
         write(out, "/request-a-quote/", R["trust"](t, pages, "/request-a-quote/", f"Request a Garage Door Quote in {t['city']}", [
-            ("Tell us what the door is doing", f"Describe the problem — noise, off-track, a broken spring, or a door you want replaced — and we'll give you a written price. Call {t['phone']} or use the form."),
+            ("Tell us what the door is doing", f"Describe the problem — noise, off-track, a broken spring, or a door you want replaced — and we'll give you a written price. {_reach(t, form_first=True)}."),
             ("Fast, no-pressure quotes", "You get a real number, not a range, once we've seen the door. Same-day service is available on most repairs.")], True))
 
         # sitemap / robots
@@ -955,8 +1619,14 @@ def build():
             f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{sm}</urlset>')
         open(os.path.join(out, "robots.txt"), "w", encoding="utf-8").write(
             f"User-agent: *\nAllow: /\nSitemap: https://{domain}/sitemap.xml\n")
+        built += 1
         print(f"  {domain}: {len(urls)} pages ({t['city']}, {t['st']})")
-    print("Done ->", DIST)
+    print(f"Done -> {DIST}  ({built} sites)")
+    if no_lead:
+        print(f"\n  !! {len(no_lead)} of {built} built sites have NO way for a visitor to make contact:")
+        print(f"     {', '.join(no_lead[:6])}{' ...' if len(no_lead) > 6 else ''}")
+        print( '     Set "phone" per site, and/or a "form_action" endpoint (per site or in')
+        print( '     the top-level "defaults" object of config/sites.json) before deploying.')
 
 if __name__ == "__main__":
     print("Building garage-door sites...")

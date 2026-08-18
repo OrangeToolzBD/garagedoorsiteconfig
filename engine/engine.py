@@ -23,9 +23,10 @@ sys.path.insert(0, ROOT)
 
 
 def cmd_build(_a):
-    import build_site
-    build_site.build()
-    print("Built -> dist/")
+    # build.py is the garage-door renderer (JSON content). build_site.py is the
+    # legacy markdown/porta-potty renderer and does nothing useful for this niche.
+    import build
+    build.build()
 
 
 def cmd_serve(_a):

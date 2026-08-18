@@ -6,7 +6,11 @@ domains — each with its own theme, layout, logo and content.
 
 This doc replaces the old scattered docs (`ENGINE_GUIDE.md`, `QUICK_START.md`,
 `DELIVERABLES.md`, etc.) with one accurate reference, audited directly against the
-current code (2026-08-11).
+current code (2026-08-17).
+
+> **Before you deploy anything:** set a lead-capture path. 999 of 1001 domains have a
+> blank `phone`, and `form_action` is unset, so `build.py` prints a warning naming every
+> site a visitor cannot contact. See §10.
 
 ---
 
@@ -24,9 +28,16 @@ garagedoorsites/
 │   │                            domain, written by the new `logo_prep.py` (see §8) so build.py
 │   │                            picks them up. Only domains.csv rows 1-200 have a source emblem;
 │   │                            the other 800 still fall back to the generated SVG mark.
-│   └── photos/                  30 city-branded .webp photos — currently UNUSED (only the legacy
-│                                porta-potty renderer references .webp; the real garage build uses
-│                                engine/assets_shared/photos/ instead)
+│   └── photos/                  the real photo source (265 .webp). GD HERO/v1 = 30 city-named
+│                                heroes (matched by city slug), GD HERO/v2 = 20 generic heroes
+│                                (fallback pool, picked by domain hash) + per-service pools
+│                                (GD REPAIR / INSTALLATION / SERVICE / MAINTENNANCE — sic) + 5
+│                                per-guide-topic pools under GD GUIDE/. build.py's
+│                                select_photos() picks the hero, 6 service cards, 6 door-style
+│                                tiles, 1 local-conditions shot and one photo per inner page.
+│                                engine/assets_shared/photos/gd-*.jpg is only the fallback.
+│                                NOTE: build.py resolves brand/ at either <repo>/brand or
+│                                <repo>/engine/brand and says which it used — keep ONE copy.
 │
 ├── <city>-tx/, dallas-tx/...    raw content drops at repo root (zip extractions with __MACOSX/ junk) —
 │                                a staging area content is copied FROM into engine/content/<slug>/
@@ -42,8 +53,13 @@ garagedoorsites/
     │                              toilet rental) engine — markdown-content based. build.py imports
     │                              only its shared CSS/nav-JS/icon helpers; it does not render
     │                              garage-door pages itself. See §7.
-    ├── templates.py               3 alternate full-site designs (ironclad / volt / nimbus),
-    │                              selected per-site via sites.json "template" field
+    ├── templates.py               9 selectable alt full-site designs (ironclad / nimbus /
+    │                              forge / coastline / beacon / atlas / hearth / quarry /
+    │                              verdant), selected per-site via sites.json "template".
+    │                              Plus the shared chrome + page skeleton + section blocks
+    │                              every design is built from. See §4.2. ("garage", the 10th
+    │                              design, is the default and lives in build.py. volt was
+    │                              retired and removed.)
     ├── layouts.py                 layout-rotation helper for `engine.py bulk` — dead/orphaned,
     │                              see §7
     ├── scaffold.py                leftover from the porta-potty sibling project (hardcoded path to
@@ -51,11 +67,12 @@ garagedoorsites/
     ├── logo_gen.py                generates a unique geometric SVG→PNG logo per domain from its
     │                              name (deterministic hash) — a fallback generator, not what's
     │                              actually used today (see §8)
-    ├── logo_prep.py                *** added in this pass *** — maps the 200 pre-made
-    │                              brand/logos/<row#>_<slug>.png emblems to the per-domain
-    │                              filenames build.py looks for (<domain>-emblem.png,
-    │                              <domain>-favicon.png). This is what `engine.py logos` was
-    │                              always supposed to call. See §8.
+    ├── logo_prep.py               maps the 200 pre-made brand/logos/<row#>_<slug>.png files to
+    │                              the per-domain names build.py looks for (<domain>-emblem.png,
+    │                              <domain>-favicon.png), knocking out the white background and
+    │                              tight-cropping to the artwork, and writes _logo_manifest.json
+    │                              ({domain: kind,w,h}) so the header can size each mark by its
+    │                              real aspect ratio. This is what `engine.py logos` calls.
     ├── make_demo_content.py       one-off script that fills content/ for the domains listed in
     │                              ../_demo5.json with placeholder copy (used to seed the 10 demo
     │                              sites — see §5.2)
@@ -66,7 +83,9 @@ garagedoorsites/
     ├── config/
     │   ├── sites.json             *** the registry — one entry per domain *** (1001 entries;
     │   │                          domain, city, st, content, brand, tagline, area, street, zip,
-    │   │                          phone, theme, layout, port[, template])
+    │   │                          phone, theme, layout, port[, template][, home][, form_action]).
+    │   │                          Also a top-level "defaults" object merged underneath every
+    │   │                          entry — set form_action there once for all 1000+ domains (§10.1).
     │   ├── themes.json             1097 named colour+font themes: {p, pd, accent, on_accent,
     │   │                          display, body, fonts}. Looked up by sites.json "theme" key.
     │   └── layouts.json             6 named structural layouts (aurora / meridian / cobalt /
@@ -81,8 +100,6 @@ garagedoorsites/
     │
     ├── assets_shared/photos/      gd-1.jpg … gd-9.jpg — the actual stock photo pool build.py
     │                              copies into every built site's /assets/photos/
-    │
-    ├── brand/                     empty — stray leftover folder, ignore
     │
     └── dist/<domain>/             *** build output (gitignored, regenerated every build) ***
         ├── index.html, /services/, /service-areas/, /guides/, /about/, /contact/,
@@ -116,10 +133,10 @@ There are **two renderers** in this folder, both reading `config/sites.json`:
 | Generates a portal `dist/index.html` | No | Yes |
 | Status | **Actively used — this is the real build** | Legacy; only its CSS/nav-JS/icon helper functions are imported by `build.py` for shared styling |
 
-**Run `python build.py`, not `python engine.py build`.** `engine.py`'s `build`
-subcommand still calls `build_site.build()` (the old markdown/porta-potty path), which
-silently does nothing useful for JSON content in `content/`. This is a leftover from
-forking the engine for the garage-door niche that was never updated — see §7.
+**`python build.py` and `python engine.py build` are now equivalent** — `engine.py`'s
+`build` subcommand used to call `build_site.build()` (the old markdown/porta-potty
+path), which silently did nothing for JSON content in `content/`. Fixed 2026-08-17;
+see §10.4.
 
 `serve.py` and `audit_seo.py` are shared and fine to use via `engine.py serve` /
 `engine.py audit` — they just read `dist/` and `config/sites.json`, independent of
@@ -135,22 +152,25 @@ described in §5.2, to round the demo set out to 10) and started the local previ
 server. All 10 returned HTTP 200 and were spot-checked in-browser. Street/zip and
 logo come from the two fixes in §8.
 
-| # | Domain | City, ST | Address | Real logo? | Local URL |
-|---|--------|----------|---------|:---:|-----------|
-| 1 | dallasgaragedoor.com | Dallas, TX | *(not in the sheet — manually added, see §8.2)* | No | http://localhost:8201/ |
-| 2 | mesagaragedoorco.com | Mesa, AZ | 7303 S Hawes Rd, 85212 | Yes | http://localhost:8203/ |
-| 3 | napervillegaragedoorpros.com | Naperville, IL | 200-300 E 5th Ave, 60565 | Yes | http://localhost:8204/ |
-| 4 | auroragaragedoorpros.com | Aurora, CO | 1550 S Potomac St, 80012 ⚠️ | Yes | http://localhost:8207/ |
-| 5 | dallasdoorpros.com | Dallas, TX | 2555 N Stemmons Fwy, 75207 ⚠️ | Yes | http://localhost:8219/ |
-| 6 | boonegaragedoorpros.com | Boone, NC | 216 S Main St, 28607 ⚠️ | Yes | http://localhost:8226/ |
-| 7 | austingaragedoorguys.com | Austin, TX | 100 Congress Ave, 78701 ⚠️ | Yes | http://localhost:8258/ |
-| 8 | puntagordagaragedoorpros.com | Punta Gorda, FL | 25551 Technology Blvd, 33950 | Yes | http://localhost:8283/ |
-| 9 | richmonddoorpros.com | Richmond, TX | 500 Commerce Dr, 77469 ⚠️ | No (row 758, outside the 200-logo range) | http://localhost:8959/ |
-| 10 | pickeringtongaragedoorpros.com | Pickerington, OH | 500 Center Point Rd, 43147 | No (row 975, outside the 200-logo range) | http://localhost:9176/ |
+| # | Domain | City, ST | Design | Logo | Local URL |
+|---|--------|----------|--------|:----:|-----------|
+| 1 | dallasgaragedoor.com | Dallas, TX | `garage` (default) | generated mark | http://localhost:8201/ |
+| 2 | mesagaragedoorco.com | Mesa, AZ | `verdant` | sheet lockup (3.0:1) | http://localhost:8203/ |
+| 3 | napervillegaragedoorpros.com | Naperville, IL | `atlas` | sheet badge | http://localhost:8204/ |
+| 4 | auroragaragedoorpros.com | Aurora, CO | `coastline` | sheet lockup (1.9:1) | http://localhost:8207/ |
+| 5 | dallasdoorpros.com | Dallas, TX | `forge` | sheet badge | http://localhost:8219/ |
+| 6 | boonegaragedoorpros.com | Boone, NC | `hearth` | sheet badge | http://localhost:8226/ |
+| 7 | austingaragedoorguys.com | Austin, TX | `beacon` | sheet badge | http://localhost:8258/ |
+| 8 | puntagordagaragedoorpros.com | Punta Gorda, FL | `nimbus` | sheet badge | http://localhost:8283/ |
+| 9 | richmonddoorpros.com | Richmond, TX | `ironclad` | generated mark (row 758) | http://localhost:8959/ |
+| 10 | pickeringtongaragedoorpros.com | Pickerington, OH | `quarry` | generated mark (row 975) | http://localhost:9176/ |
 
-⚠️ = the source sheet flags this row `disambiguation_risk: HIGH-use-verify_url` — the city name
-is shared with other US cities and the address should be spot-checked against the sheet's Google
-Maps link before treating it as verified. See §8.3.
+Every site now runs a **different design** (§4.2), and every site has a logo. The three
+domains outside the 200-logo range use marks generated by `logo_gen.py`; the other seven
+use the hand-made lockups mapped by `logo_prep.py`.
+
+Addresses are unchanged from §8.2 — the rows flagged there still carry the sheet's
+`disambiguation_risk: HIGH-use-verify_url` warning and should be verified before deploy.
 
 Also reachable from another device on the same Wi-Fi at `http://192.168.1.64:<port>/`.
 
@@ -176,7 +196,7 @@ files exist:
 - **Neighborhood/suburb pages** (`<prefix>-nb-*.json` / `-sub-*.json` → `/service-areas/<slug>/`)
 - **Guide pages** (`<prefix>-top-*.json` → `/guides/<slug>/`)
 - **Section indexes**: `/services/`, `/service-areas/`, `/guides/` (auto-generated if any pages of that type exist)
-- **Trust pages**: `/about/`, `/contact/`, `/request-a-quote/` (copy is hard-coded in `build.py`, personalized with `{brand}`, `{city}`, `{phone}`)
+- **Trust pages**: `/about/`, `/contact/`, `/request-a-quote/` (copy is hard-coded in `build.py`, personalized with `{brand}`, `{city}`, `{phone}`). `/request-a-quote/` leads with the native lead-capture form when `form_action` is set — see §10.1.
 - **`sitemap.xml`** and **`robots.txt`** (auto-generated from the actual page list)
 
 SEO/AEO/GEO baked in automatically: `<title>` ≤ 60 chars, meta description,
@@ -184,9 +204,85 @@ canonical URL, OpenGraph + Twitter cards, single `<h1>`/page, `FAQPage` JSON-LD 
 the homepage and every service page, `LocalBusiness` + `Service` + `BreadcrumbList`
 JSON-LD `@graph`.
 
-3 alternate full visual designs (**ironclad**, **volt**, **nimbus** — see
-`templates.py`) can replace the default "garage" design per-site via a `"template"`
-field in that site's `sites.json` entry.
+2 alternate full visual designs (**ironclad**, **nimbus** — see `templates.py`) can
+replace the default "garage" design per-site via a `"template"` field in that site's
+`sites.json` entry. A third, **volt** (dark/neon), was retired for reading too far
+from the niche: its renderers are still in `templates.py` but it is no longer in
+`REGISTRY`, so it can't be selected until that entry is put back.
+
+### 4.1 Homepage stacks
+
+The garage design builds its homepage from one of three stacks, chosen by the
+optional `"home"` field in `sites.json`:
+
+| `home` | Sections | Notes |
+|---|---|---|
+| *(unset)* / `expanded` | **17** | **The default.** Full stack, below. |
+| `classic` | 8 | The original short stack (hero, trust, services, why-us, steps, areas, FAQ, CTA). |
+| `showcase` | 8 | Swaps the why-us grid for the split+stats treatment. |
+
+The expanded stack, in render order — hero, trust bar, services grid, symptom
+finder, local conditions, why-us split, what-we-fix-most, repair-vs-replace,
+how-it-works, door styles, emergency strip, maintenance tips, spring-safety
+callout, service areas, guides teaser, FAQ, CTA band.
+
+Four of those render the city's **own** copy out of `<city>-home.json`'s
+`sections[]`, which the pre-2026-08 homepage loaded and then discarded:
+
+| Section | home JSON `h2` key (first match wins) |
+|---|---|
+| Local conditions | `the_area_and_its_housing`, else `why_local_matters` |
+| What we fix most here | `what_we_fix_most_here` |
+| How it works (intro) | `how_a_call_goes` |
+| Service areas (prose) | `areas_we_cover` |
+
+Each renders **nothing** when its city's JSON has none of those keys, so a thin
+content folder yields a shorter page rather than a broken or padded one — the
+demo-seeded cities land on 16 sections, Dallas on the full 17. Nothing in the
+static sections invents reviews, counts, awards or certifications; `stats_band()`
+and the review badge still render only from configured figures.
+
+`contact_band()` remains in `build.py` but is deliberately unused — it duplicated
+the closing CTA.
+
+### 4.2 The ten designs
+
+A site picks a design with `"template"` in `config/sites.json`. Omit the key and it
+renders with `garage`, the default design in `build.py`. The other nine live in
+`templates.py`:
+
+| Design | Character | Display / body type | Homepage opens with |
+|--------|-----------|---------------------|---------------------|
+| `garage` | contractor default, image-overlay cards | Urbanist / Open Sans | photo hero, layout-driven |
+| `ironclad` | editorial, cream + brass, hairline rules | Playfair Display / Inter | full-bleed photo, manifesto |
+| `nimbus` | friendly, rounded, floating pill nav | Baloo 2 / Nunito | soft centred hero |
+| `forge` | industrial, near-black steel, square corners | Oswald / Inter | dark photo + spec rail |
+| `coastline` | airy editorial, wide margins | Fraunces / Karla | split text + tall photo |
+| `beacon` | colour-block, oversized display caps | Anton / Inter | flat brand panel, no photo |
+| `atlas` | corporate technical, dense, tabular | Roboto Slab / Roboto | compact banner + at-a-glance table |
+| `hearth` | warm residential, rounded photo cards | Bitter / Nunito Sans | rounded hero card |
+| `quarry` | utility, hard rules, mono labels | Space Grotesk / IBM Plex Mono | type-led, bordered photo slab |
+| `verdant` | fresh geometric, pill accents | Sora / Inter | centred type over a photo band |
+
+Colour is **not** part of the design. Each stylesheet declares `__P__`, `__PD__`,
+`__ACCENT__` and `__ONACCENT__`, and `_paint()` substitutes the site's own theme
+colours — derived from the brand hex in `domains.csv` — at build time. Two sites on
+the same design still read as different companies, and each one matches its own logo.
+
+**Shared chrome.** Every alt design uses one header/footer/nav implementation
+(`_chrome_header` / `_chrome_footer` / `CHROME_JS` / `CHROME_CSS`). The design's
+stylesheet themes the `.tc-*` classes; it does not re-implement them. This is
+deliberate — see §10.6 for what re-typing the nav per design had produced.
+
+**Shared page skeleton.** Designs after `ironclad`/`nimbus` build their inner, index
+and trust pages from `_gen_inner` / `_gen_index` / `_gen_trust` (classes `.pg-*`) and
+compose their homepages from the section blocks in `templates.py` (`hb_services`,
+`hb_steps`, `hb_signals`, `hb_areas`, `hb_guides`, `hb_faq`, `hb_cta`, classes
+`.hb-*`). Identity comes from the stylesheet, the chrome, the bespoke hero and the
+**order** the blocks are composed in — each design uses a different one.
+
+Adding an eleventh design is: fonts constant + CSS constant + a `*_home()` function,
+then one line in `REGISTRY` via `_design(...)`.
 
 ---
 
@@ -327,11 +423,10 @@ Filename encodes the page type: `<prefix>-home.json`, `-svc-<slug>.json`,
 
 ## 7. Audit findings — things to know before relying on this engine
 
-1. **`engine.py build` is wrong for this niche.** It calls `build_site.build()` (the
-   markdown-based porta-potty renderer), not `build.py`'s own `build()` (the
-   JSON-based garage-door renderer actually used for all 10 live sites). Use
-   `python build.py` directly, or fix `engine.py`'s `cmd_build` to
-   `import build; build.build()` instead of `import build_site; build_site.build()`.
+1. ~~**`engine.py build` is wrong for this niche.**~~ **Fixed 2026-08-17** — `cmd_build`
+   called `build_site.build()` (the markdown-based porta-potty renderer) instead of
+   `build.py`'s own `build()`. It now does `import build; build.build()`, so
+   `engine.py build` and `python build.py` are equivalent.
 
 2. ~~**`engine.py logos` is broken.**~~ **Fixed in this pass** — `cmd_logos` did
    `import logo_prep`, but no `logo_prep.py` existed (only `logo_gen.py`), so it
@@ -380,19 +475,306 @@ Filename encodes the page type: `<prefix>-home.json`, `-svc-<slug>.json`,
    comes from the round-robin `LAYOUTS = ["aurora","meridian","cobalt","harbor",
    "summit","monarch"]` list, not from `layouts.py`.
 
-8. **`brand/photos/*.webp`** (30 city-branded photos) aren't referenced by
-   `build.py` at all — only the unused `build_site.py` reads `.webp`. The actual
-   photo pool every garage-door site uses is `engine/assets_shared/photos/gd-1.jpg`
-   … `gd-9.jpg` (generic stock, not city-specific).
+8. ~~**`brand/photos/*.webp`** aren't referenced by `build.py` at all.~~ **Stale —
+   they are now the primary photo source.** `select_photos()` maps the 30 city hero
+   shots by city slug, and picks per-service, per-guide and per-inner-page images
+   deterministically from the category folders (`GD REPAIR`, `GD INSTALLATION`,
+   `GD SERVICE`, `GD MAINTENNANCE`, `GD GUIDE/*`). `assets_shared/photos/gd-*.jpg`
+   is now only the fallback for a gap — mainly the hero on a city with no matching
+   shot, which is still ~970 of the 1000 domains.
 
 9. **`config/themes.json`'s `_comment` field** still says "Design themes for the
    Porta Pros engine" — cosmetic, but another sign large parts of this repo were
    forked from that sibling project without a full pass to re-label things.
 
-None of the above blocks the documented bulk workflow in §5 — `build.py`, `serve.py`,
-`audit_seo.py`, `engine.py new`, and `engine.py bulk` all work as described. The
-issues are in the parts of `engine.py` (`build`, `logos`) and the logo/photo asset
-pipeline that silently do the wrong thing rather than error loudly.
+10. **`engine.py bulk` crashes on every run — `KeyError: 'layouts'`.** Reproduced
+    2026-08-18. `cmd_bulk` loads `config/layouts.json` (which has no `"layouts"`
+    key — it is a dict of *named* layout variants) and then does
+    `layouts["layouts"].append(...)` for the first unregistered domain. It raises
+    before writing anything, so `sites.json` and `themes.json` are left untouched:
+    the command is a total no-op, not a partial one. This is the documented path
+    for registering the remaining ~990 domains, so it blocks bulk onboarding.
+    Fix is a `setdefault("layouts", [])` — but see finding 7 first: the per-domain
+    list it wants to write is read by nothing.
+
+None of the above blocks the documented bulk workflow in §5 except finding 10 —
+`build.py`, `serve.py`, `audit_seo.py` and `engine.py new` all work as described. The
+remaining issues are in the parts of the asset pipeline that silently do the wrong
+thing rather than error loudly.
+
+---
+
+## 10. The 2026-08-17 fix pass
+
+A full audit of the built output (10 sites, 202 pages, verified in-browser at 375 /
+700 / 1000 / 1280 px) found the engine structurally sound — 0 broken internal links,
+one `<h1>` per page, alt text on every image, complete JSON-LD, and all 54
+layout × home-stack × template combinations rendering without exception — but with a
+set of real defects, all fixed below.
+
+### 10.1 Conversion — the blocking one
+
+**Nothing on any built site could capture a lead.** 999 of 1001 registered domains
+have a blank `phone`, and `build.py` built its dial link as `"+1" + digits(phone)` with
+no guard, so every page carried ~6 `<a href="tel:+1"></a>` links — empty, unlabelled,
+dialling nothing. Separately, `<form>` count across all 202 pages was **zero**: the
+quote page only emitted an embed when `ghl_form_id` was set, and that key was absent
+from every entry.
+
+Now:
+
+- **`has_phone()` / `phone_link()` / `call_cta()` in `build.py`** gate every call
+  affordance. With no number, the dial links are omitted and the primary CTA becomes
+  the quote form. Prose that named the number (`"Call {phone} to reach…"`) routes
+  through `_reach()` so it never renders a dangling "Call  .". The same guard was
+  applied to `templates.py` (`_tel()` / `_quote()`), which had six unguarded `tel:`
+  links of its own.
+- **`quote_form()`** renders a real, native, accessible form — labelled fields, two
+  required, a hidden `site`/`city` pair so you can tell which of 1000 domains a
+  submission came from, and a `company` honeypot that only bots fill. No JS needed.
+  It's shared by all four designs via `QFORM_CSS` (every custom property carries a
+  fallback, because ironclad/volt/nimbus each define a different variable set).
+- **`"defaults"` in `config/sites.json`** is a new top-level object merged underneath
+  every site entry, so one `form_action` gives all 1000+ domains a working form
+  instead of editing each. Any endpoint accepting a normal HTML POST works
+  (Formspree, Netlify Forms, a GHL inbound webhook, your own handler).
+- **`build.py` warns**, per build, naming every site with neither a phone nor a form
+  endpoint.
+
+`form_action` is deliberately left empty — the endpoint is yours to choose. Set it and
+rebuild; verified working end to end (10/10 sites render the form, native validation
+blocks an empty submit, single column and no horizontal overflow at 375px).
+
+### 10.2 Navigation
+
+- **Dropdowns were dead between 961px and 1120px.** The CSS switches to the burger
+  panel at `max-width:1120px`, but `NAVJS` gated the submenu click-toggle on
+  `matchMedia('(max-width:960px)')`. In that band the menu opened but Services /
+  Service Areas / Guides could not be expanded at all. Both now read 1120px.
+- **The header lost its gutter at two different widths** — `.hd` is also a `.wrap`, and
+  both rules declared `padding` at equal specificity, so whichever came later in source
+  won outright: below 561px the media-query `.wrap` stripped the 12px vertical padding,
+  and between 561–1180px `.hd` stripped the 24px horizontal one (the logo sat flush at
+  `left: 0`). A single `.wrap.hd` compound selector now states all four sides.
+- The burger and the three dropdown triggers gained `aria-expanded` / `aria-controls`,
+  kept in sync by `NAVJS`; Escape closes the panel and returns focus.
+
+**The sticky navbar itself was already correct** and needed no change — `header.site`
+(garage), `header` (ironclad) and `.navwrap` (nimbus) are all `position:sticky`, at
+every breakpoint, on mobile and desktop. `html,body{overflow-x:clip}` is deliberate:
+`clip` preserves sticky where `overflow-x:hidden` would break it. Don't "fix" that.
+
+### 10.3 Alt templates (ironclad / nimbus / retired volt)
+
+- Footers hard-coded **`© 2024`** while the garage design used `date.today().year`.
+  Now `_year()`.
+- They hard-coded three generic `gd-*.jpg` stock photos and never called
+  `select_photos()`, so those sites shipped generic imagery while every garage-design
+  site got the curated per-city set. Now `_hero()` / `_card()` / `_inner()`.
+- They now render the shared quote form on `/request-a-quote/` too.
+
+### 10.4 Tooling, SEO and a11y
+
+- **`engine.py audit` crashed** on the first domain: `audit_seo.py` collected `@type`
+  into a `set()`, but `org_schema()` emits a *list* (`["LocalBusiness",
+  "HomeAndConstructionBusiness"]`) — `TypeError: unhashable type`. It printed nothing
+  at all. Fixed, plus it now skips registered-but-unbuilt domains (was 991 empty
+  blocks) and unescapes entities before measuring title/description length, which had
+  been counting `&amp;` as five characters.
+- **`engine.py build`** now calls the right renderer (see §7.1).
+- **Duplicate `<title>` on 6 of 10 sites** — the homepage and
+  `/services/garage-door-repair/` shipped identical titles, competing for the same
+  query. `home_title()` picks the first non-colliding candidate that survives the
+  60-char trim. 0 duplicates now, 0 length issues across all 10 sites.
+- **`LocalBusiness` schema** no longer emits `"telephone": ""`, and no longer puts the
+  city name in `streetAddress` when no street is on file — both are omitted instead.
+- **A11y:** `<main id="main">` landmark and a skip link on all four designs, focus-visible
+  rings, and the footer column headings are `<h3>` (they were `<h4>` directly after an
+  `<h2>` — the one heading-level skip on every page).
+- **Perf:** `width`/`height` on every photo (CLS), `decoding="async"`, `rel=preload` for
+  the hero on all four designs, and `scroll-padding-top` so in-page anchors clear the
+  sticky header. The mobile nav panel uses `100dvh` with a `100vh` fallback.
+
+### 10.5 Known, not fixed — needs your input
+
+- **Duplicate content.** `dallasgaragedoor.com` and `dallasdoorpros.com` build from the
+  same content folder: 84.6% mean 8-word-shingle overlap across 41 shared URLs. The six
+  demo-seeded cities are ~80% identical to each other. This is a content problem, not an
+  engine one — see §5.2 step 2.
+- **Phone numbers.** Only two domains have one, and both are placeholders
+  (`(214) 000-0000` and a `555-` number).
+- **Address quality.** Unchanged from §8.3 — 292 rows flagged `disambiguation_risk`, 46
+  street addresses reused across different cities.
+- **`llms.txt`** is still only in `build_site.py` (§7.5).
+
+---
+
+## 10.6 The 2026-08-18 pass — logos, ten designs, working navigation
+
+### Logos: the 200 new files, rendered at their real shape
+
+The refreshed `brand/logos/` set arrived as 200 numbered PNGs; the domain-named twins
+`build.py` looks up did not exist, so every site had silently fallen back to the
+generated SVG mark again. `logo_prep.py` was re-run, and rewritten while there:
+
+- **Tight-crops to the alpha bounding box.** These arrive as artwork floating in a
+  200×200 field of white. Cropping to the real ink is what lets the header size a logo
+  by its artwork rather than its padding.
+- **Writes `_logo_manifest.json`** — `{domain: {kind, w, h}}` — read once by `build.py`.
+- **Knockout is vectorised** over channels instead of a 40 000-iteration Python loop
+  per file.
+- **Favicons are squared**, not stretched.
+
+The rendering side then had to stop forcing every mark into a 40×40 box. The 200 files
+range from **0.99:1 to 3.44:1**, and all of them draw the business name into the
+artwork — so the header was showing a squashed, illegible wordmark *next to a text
+repeat of the same name*. Now:
+
+- `logo_box()` sizes from the file's real aspect ratio.
+- A **horizontal lockup** (≥1.6:1 — Mesa, Aurora) stands alone; the text is dropped.
+- A **square badge** (Naperville, Boone, Austin, Dallas Door Pros, Punta Gorda) is
+  illegible at header height, so it keeps the text label and acts as the emblem —
+  with the white chip box dropped, since a finished badge does not need one.
+- `width`/`height` attributes carry real dimensions, so nothing reflows on load.
+
+Three of the ten domains sit outside the 200-logo range (`dallasgaragedoor.com` is not
+in the sheet at all); marks for those were generated with `logo_gen.py`.
+
+### Photography
+
+`select_photos()` already mapped `brand/photos/` correctly (finding 8 above is stale).
+What was missing was the **homepages using it**: the new designs rendered as walls of
+text, and `nimbus` used a repeated 🔧 emoji where a service photo belonged. Service
+cards, guide cards and `ironclad`'s service rows now all carry the per-city, per-service
+image `select_photos()` picked. Homepage image counts went from 2–3 to 9–20.
+
+### The variants were mockups, and the designs inherited that
+
+`variants/site1,3,4,5` are **single-page mockups** — every nav link is an in-page
+`#anchor`, the phone numbers are hard-coded, and there are no inner pages. `ironclad`
+and `nimbus` were ported from them and inherited mockup-grade chrome:
+
+- dropdowns opened on `:hover` only — **no touch device could open a menu**
+- the mobile panel linked to the three index pages, leaving ~30 pages per site
+  unreachable on a phone
+- burgers were inline `onclick` with no `aria-expanded`, `aria-controls` or label
+- `_iron_js()` was a script that did nothing at all
+- footers used `<a>f</a>`, `<a>IG</a>` — anchors with no `href`
+
+**The default `garage` design had the same defect**, found while verifying: its mega
+menus were `:hover`-only above 1120px, and `nav.js` only bound the trigger click below
+that breakpoint. The triggers are `<button aria-haspopup>` elements, so a keyboard user
+could tab to one, press Enter, and get nothing — and a desktop click did nothing either.
+Fixed in `build_site.py` (`.open`/`:focus-within` rules, click bound at every width,
+outside-click closes).
+
+The alt designs now share **one** chrome (§4.2). It guarantees, for every design: every
+content page reachable from the nav on desktop *and* mobile, dropdowns that open on
+hover *and* click/tap/keyboard, correct aria throughout, Escape-to-close with focus
+return, and no anchor without an `href`. A new design cannot reintroduce the mockup nav
+without deliberately overriding structural CSS.
+
+`volt` was deleted rather than left retired-in-place — it carried the pre-chrome markup
+and would have been a working example of the pattern the module exists to prevent.
+
+### Invented trust signals removed
+
+`ironclad` hard-coded **"Est. 2004"** into every header, and rendered two five-star
+"customer quotes" — one of which was the text of an FAQ answer, attributed to a
+homeowner. Nobody said either. Both are gone; the block now renders the FAQ as an FAQ,
+which is also what its `FAQPage` schema claims. The new section blocks assert no review
+score, count, founding year, award or certification. The pre-existing
+"Licensed & fully insured" / "Parts and labor warranty" lines in `build.py` are
+untouched and still unverified per-site — see §7.
+
+### Asset refresh (same day) — new photo set, and a caveat on the logos
+
+`brand/` was replaced with a zip dropped in `photos/`. Two things came out of that:
+
+- **The zip contains no logos** — 265 files, all `.webp`. Deleting `brand/` also removed
+  the 200 logo PNGs, so they were restored from git (`git checkout -- brand/logos`) and
+  re-derived with `logo_prep.py`. The numbered source files were never modified.
+- **Photos are now foldered**, and heroes have their own directory:
+
+      brand/photos/GD HERO/v1/     30 city-named shots  (<city>_garage_door.webp)
+      brand/photos/GD HERO/v2/     20 generic shots     (garage-door-hero NN.webp)
+      brand/photos/GD GUIDE/<topic>/   5 topics x 10
+      brand/photos/GD REPAIR|INSTALLATION|SERVICE|MAINTENNANCE/   38-49 each
+
+  `_CITY_HERO` now reads `GD HERO/v1`, and `HERO_POOL` holds the 20 generic shots.
+  A city with its own photo gets it; every other city draws from the generic pool by a
+  hash of its domain. That is the fix for the old behaviour where ~970 of the 1000
+  domains would all have opened on the same `gd-4.jpg`.
+
+  Note: one zip folder is named `"Noises "` with a trailing space, which Windows cannot
+  create. The extractor strips whitespace from each path segment — which also matches
+  the folder names `GUIDE_PHOTO_DIRS` already expects.
+
+**Three of the ten domains have no logo in the 200-file set** — `dallasgaragedoor.com`
+(not in `domains.csv` at all), `richmonddoorpros.com` (row 758) and
+`pickeringtongaragedoorpros.com` (row 975). They render the engine's built-in SVG door
+mark. Marks generated for them by `logo_gen.py` were deleted: a generated hexagon is not
+this business's logo, and shipping one is worse than an honest placeholder.
+
+### The quote form always renders
+
+`quote_form()` used to return `""` when `form_action` was unset, so `/request-a-quote/`
+was a page promising a written price with no form on it. It now always renders, on all
+ten designs. Until an endpoint is configured the form is **inert**: no `action`
+attribute, and submitting shows an inline notice instead of posting. That is deliberate
+— a form that silently POSTs into the void is indistinguishable from a working one while
+dropping every lead. Setting `form_action` (per site, or once in `defaults`) makes the
+same markup live with no other change.
+
+Two knock-on fixes came with it: the GHL-embed branch tested `not form` first and would
+never have fired once the form always rendered, and the "What happens next" card — which
+only ever appeared alongside a configured form — was an `h3` directly under the page
+`h1`, so it started reporting as a heading-level skip the moment it began rendering.
+
+### Brand asset location, logo visibility and the quote-form container
+
+**One brand folder, resolved not assumed.** `brand/` existed at both `<repo>/brand/`
+and `<repo>/engine/brand/`, which is a nasty trap: dropping a new logo into the copy
+the build does *not* read is indistinguishable from the build ignoring your file.
+`build.py` now resolves the location (`_brand_root`), prefers whichever copy holds more
+files, breaks ties toward the repo root, and prints which one it used when both exist.
+The duplicate `engine/brand/` (identical logos, plus a stale 200-file photo set with no
+`GD HERO`) has been deleted.
+
+**Logos on dark chrome.** The 200 logos are dark artwork on transparency, so on a dark
+header or footer they disappeared into the background — `beacon`'s purple bar and
+`forge`'s near-black footer both rendered an apparently empty space. Designs with dark
+chrome now append `DARK_BAR_LOGO` / `DARK_FOOT_LOGO`, which put a white plate behind the
+artwork. The plate targets `.tc-brand--lockup` / `.tc-brand__mark`, never `.tc-brand`
+itself: those bars set `color:#fff`, so plating the whole link would have put white text
+on a white box. The default design gets the same treatment via `.gf-logo:has(...)`.
+
+**Footer brand.** `_chrome_brand(t, h, text=False)` renders the mark alone at 104px
+(78px on mobile) with no business name beside it — the logo is legible at that size and
+the name is already drawn into the artwork. The accessible name comes from the image's
+alt text.
+
+**The quote form had no container on seven designs.** `_quote_block` wraps itself in
+`.wrap`, a class only `ironclad` and `nimbus` define. On the seven block-composed
+designs `.wrap` resolved to `max-width:none; padding:0`, so the form ran the full
+viewport width on desktop and sat flush against the screen edge on a phone. `PAGE_CSS`
+now aliases `.wrap` to the same box as `.pg-wrap`. Measured after the fix: the form's
+container starts at the same x as the page container (1180px, both at x=43 on a 1280px
+viewport) and keeps a 28px gutter at 375px.
+
+### Verified
+
+Rebuilt and checked in-browser at 375 px and 1280 px. Across 202 pages: **0 broken
+internal links, 0 duplicate IDs, exactly one `<h1>` per page, 0 heading-level skips,
+0 anchors without `href`, 0 unnamed buttons, 0 images without `alt` or dimensions, 0
+horizontal overflow.** On every one of the ten sites each nav group was opened and a
+menu link confirmed **hit-testable** via `elementFromPoint` — not merely present in the
+DOM. Mobile: burger opens, all three accordion groups expand, 14–40 links reachable,
+no tap target under 32 px.
+
+`audit_seo.py` was also corrected: it counted a deliberate `alt=""` (a decorative image,
+correct for the brand mark beside the visible business name) as a missing alt, and so
+reported 30–82 false failures per site against markup that was already right.
 
 ---
 
@@ -496,8 +878,20 @@ python make_demo_content.py           # placeholder content for domains listed i
 python engine.py logos                                                        # or: python logo_prep.py
 python logo_gen.py ../domains.csv --out ../brand/logos [--only domain ...]    # for domains outside rows 1-200
 
-# build / preview / audit  — use these three directly, not `engine.py build`
-python build.py
+# build / preview / audit
+python build.py             # or: python engine.py build   (equivalent since 2026-08-17)
 python engine.py serve      # or: python serve.py
 python engine.py audit      # or: python audit_seo.py
 ```
+
+### Before deploying: wire up lead capture
+
+```bash
+# one endpoint for every domain — edit config/sites.json:
+#   "defaults": { "form_action": "https://formspree.io/f/xxxxxxx" }
+# then rebuild; build.py names any site still without a phone or a form.
+python build.py
+```
+Any endpoint that accepts a normal HTML POST works. Posted fields: `site`, `city`,
+`name`, `phone`, `email`, `address`, `service`, `notes`, plus a `company` honeypot —
+**reject submissions where `company` is non-empty**, they're bots.

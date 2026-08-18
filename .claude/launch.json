@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sites",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["engine/serve.py"],
+      "port": 8201
+    }
+  ]
+}

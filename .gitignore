@@ -13,3 +13,6 @@ engine/dist/
 
 # Config backups
 *.bak
+
+# Source asset archives (already extracted into brand/photos/)
+photos/*.zip

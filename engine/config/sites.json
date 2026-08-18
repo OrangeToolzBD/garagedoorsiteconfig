@@ -1,5 +1,9 @@
 {
   "_comment": "Garage-door niche sites. Each entry: domain, city, st, content (folder under ./content), brand, theme, layout, port, plus phone/address (placeholders until the master sheet lands).",
+  "defaults": {
+    "_comment": "Applied underneath every entry in \"sites\" (a per-site key always wins). Set form_action once here to give all 1000+ domains a working quote form: any endpoint that accepts a normal HTML POST works (Formspree, Netlify Forms, a GHL inbound webhook, your own handler). Fields posted: site, city, name, phone, email, address, service, notes, plus a `company` honeypot that only bots fill - reject those server-side. Leave empty and build.py will warn that those sites have no way to capture a lead.",
+    "form_action": ""
+  },
   "sites": [
     {
       "domain": "dallasgaragedoor.com",
@@ -44,7 +48,8 @@
       "phone": "",
       "theme": "mesagaragedoorco",
       "layout": "cobalt",
-      "port": 8203
+      "port": 8203,
+      "template": "verdant"
     },
     {
       "domain": "napervillegaragedoorpros.com",
@@ -59,7 +64,8 @@
       "phone": "",
       "theme": "napervillegaragedoorpros",
       "layout": "harbor",
-      "port": 8204
+      "port": 8204,
+      "template": "atlas"
     },
     {
       "domain": "glendalegaragedoorco.com",
@@ -104,7 +110,8 @@
       "phone": "",
       "theme": "auroragaragedoorpros",
       "layout": "aurora",
-      "port": 8207
+      "port": 8207,
+      "template": "coastline"
     },
     {
       "domain": "wheatongaragedoorpros.com",
@@ -284,7 +291,8 @@
       "phone": "",
       "theme": "dallasdoorpros",
       "layout": "cobalt",
-      "port": 8219
+      "port": 8219,
+      "template": "forge"
     },
     {
       "domain": "ashlandgaragedoorpros.com",
@@ -390,7 +398,7 @@
       "theme": "boonegaragedoorpros",
       "layout": "meridian",
       "port": 8226,
-      "template": "volt"
+      "template": "hearth"
     },
     {
       "domain": "evanstongaragedoorpros.com",
@@ -893,7 +901,8 @@
           "24/7",
           "Emergency service"
         ]
-      ]
+      ],
+      "template": "beacon"
     },
     {
       "domain": "burbankgaragedoorpros.com",
@@ -1268,7 +1277,8 @@
       "phone": "",
       "theme": "puntagordagaragedoorpros",
       "layout": "summit",
-      "port": 8283
+      "port": 8283,
+      "template": "nimbus"
     },
     {
       "domain": "planogaragedoorpros.com",
@@ -14665,7 +14675,7 @@
       "theme": "pickeringtongaragedoorpros",
       "layout": "monarch",
       "port": 9176,
-      "template": "nimbus"
+      "template": "quarry"
     },
     {
       "domain": "sandygaragedoorpros.com",
