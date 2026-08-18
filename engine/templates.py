@@ -1147,7 +1147,8 @@ def _mk(css_str, home, inner, index, trust, blocks=False):
     # CHROME_CSS first so a design's own rules can theme it; the design stylesheet
     # always wins on colour/type, never on the layout that makes the nav work.
     base = CHROME_CSS + (PAGE_CSS + BLOCK_CSS if blocks else "")
-    return {"css": (lambda cs: (lambda t: base + _paint(cs, t) + A11Y_CSS + H.QFORM_CSS))(css_str),
+    return {"css": (lambda cs: (lambda t: base + _paint(cs, t) + A11Y_CSS + H.QFORM_CSS
+                                          + H.actionbar_css(t)))(css_str),
             "home": home,
             "inner": (lambda fn: (lambda t, p, pages: fn(t, pages, p)))(inner),
             "index": index, "trust": trust}

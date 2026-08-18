@@ -1,0 +1,39 @@
+version: "2"
+
+# Tunnel definitions for the five preview sites. Deliberately holds NO authtoken --
+# keep that in ngrok's own config (`ngrok config add-authtoken <token>`) and pass both
+# files, so a credential never lands in this repo:
+#
+#   ngrok start --all --config "$env:LOCALAPPDATA\ngrok\ngrok.yml" --config engine\ngrok-tunnels.yml
+#
+# ngrok's free plan allows a single agent session with one tunnel; several at once
+# needs a paid plan. On free, run them one at a time instead:
+#
+#   ngrok http 8219 --config "$env:LOCALAPPDATA\ngrok\ngrok.yml"
+#
+# No `domain:` is set, so each tunnel gets an ephemeral *.ngrok-free.app URL. Add
+# `domain: <your-reserved>.ngrok.app` per tunnel if you have reserved names.
+#
+# Each site needs its own origin. Every page uses root-relative links
+# (/assets/..., /services/...), so these cannot be multiplexed behind one hostname on
+# separate paths -- the asset and nav URLs would resolve to the tunnel root and 404.
+tunnels:
+  dallas-door-pros:
+    proto: http
+    addr: 8219
+
+  austin-garage-door-guys:
+    proto: http
+    addr: 8258
+
+  pickerington-garage-door-pros:
+    proto: http
+    addr: 9176
+
+  richmond-door-pros:
+    proto: http
+    addr: 8959
+
+  aurora-garage-door-pros:
+    proto: http
+    addr: 8207

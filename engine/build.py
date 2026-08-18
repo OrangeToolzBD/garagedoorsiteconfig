@@ -1398,6 +1398,65 @@ def index_page(t, pages, cat, url, title_h1, eyebrow, blurb):
     return (head_html(t, seo_title(f"{title_h1} | {t['brand']}"), blurb, url, schemas, og_image=t.get("hero_img") or HERO_IMG)
             + header(t, pages) + body + footer(t, pages) + "</body></html>")
 
+# ---------------------------------------------------------------- mobile action bar
+# A fixed call/quote bar under 1024px. Injected by write() for every page of every
+# design rather than added to each renderer, so no design can ship without it and none
+# can ship two.
+ACTIONBAR_BP = 1024
+
+def action_bar(t, url):
+    """Sticky bottom call/quote bar, or "" when it would add nothing.
+
+    The call button follows the same rule as every other call affordance here: it only
+    exists when there is a real number (has_phone), so no site renders a `tel:` link
+    that dials nothing. On /request-a-quote/ the quote button is dropped -- linking a
+    page to itself is not an action -- which means a phone-less site gets no bar there
+    at all."""
+    on_quote = url.rstrip("/") == "/request-a-quote"
+    call = (f'<a class="abar__btn abar__btn--call" href="tel:{t["tel"]}">'
+            f'{icon("phone")}<span>Call now</span></a>') if has_phone(t) else ""
+    quote = ("" if on_quote else
+             f'<a class="abar__btn abar__btn--quote" href="/request-a-quote/">'
+             f'{_svg_mail()}<span>Get a quote</span></a>')
+    if not (call or quote):
+        return ""
+    return (f'<div class="abar" role="group" aria-label="Contact {esc(t["brand"])}">'
+            f'{call}{quote}</div>')
+
+def actionbar_css(t):
+    """Per-site so the bar picks up that site's brand colours; the ten designs declare
+    their palettes under different variable names, so nothing here relies on --p/--accent
+    resolving to anything."""
+    return ("""
+.abar{display:none}
+@media(max-width:__BP__px){
+  .abar{display:flex;gap:10px;position:fixed;left:0;right:0;bottom:0;z-index:95;
+    padding:10px 14px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));
+    background:rgba(255,255,255,.97);backdrop-filter:blur(10px);
+    border-top:1px solid rgba(15,23,42,.14);box-shadow:0 -6px 22px rgba(15,23,42,.14)}
+  /* the buttons share the width evenly, but stop growing on a tablet where a
+     half-viewport-wide button just looks broken */
+  .abar__btn{flex:1 1 0;min-width:0;max-width:340px}
+  .abar{justify-content:center}
+  .abar__btn{display:flex;align-items:center;justify-content:center;gap:9px;
+    min-height:52px;padding:0 14px;border-radius:12px;text-decoration:none;
+    font-weight:700;font-size:1rem;line-height:1.1;text-align:center}
+  .abar__btn svg{width:19px;height:19px;flex:0 0 auto}
+  .abar__btn--call{background:__P__;color:#fff}
+  .abar__btn--quote{background:__ACCENT__;color:__ONACCENT__}
+  /* keep the bar from sitting on top of the last of the footer */
+  body{padding-bottom:calc(74px + env(safe-area-inset-bottom,0px))}
+}
+@media(max-width:__BP__px) and (prefers-color-scheme:dark){
+  .abar{background:rgba(255,255,255,.97)}
+}
+"""
+            .replace("__BP__", str(ACTIONBAR_BP))
+            .replace("__P__", t.get("p", "#12213a"))
+            .replace("__ACCENT__", t.get("accent", "#c2703a"))
+            .replace("__ONACCENT__", t.get("on_accent", "#ffffff")))
+
+
 SERVICE_OPTIONS = ["Garage door repair", "New door installation", "Spring replacement",
                    "Opener repair or replacement", "Off-track door or cable",
                    "Service / tune-up", "Something else"]
@@ -1488,7 +1547,7 @@ def trust_page(t, pages, url, h1, blocks, is_quote=False):
 # ---------------------------------------------------------------- renderer dispatch
 # The default "garage" design is the module functions above. Alternate full designs
 # (ironclad / volt / nimbus) live in templates.py and expose the same interface.
-GARAGE = {"css": lambda t: css(t) + GD_CSS + QFORM_CSS, "navjs": NAVJS,
+GARAGE = {"css": lambda t: css(t) + GD_CSS + QFORM_CSS + actionbar_css(t), "navjs": NAVJS,
           "home": lambda t, pages: home_page(t, pages),
           "inner": lambda t, p, pages: inner_page(t, p, pages),
           "index": lambda t, pages, cat, url, h1, eb, bl: index_page(t, pages, cat, url, h1, eb, bl),
@@ -1506,8 +1565,14 @@ def get_renderer(t):
     return GARAGE
 
 # ---------------------------------------------------------------- build
-def write(out, url, htmlstr):
+def write(out, url, htmlstr, t=None):
     htmlstr = clean_text(htmlstr)  # sweep any hardcoded typographic chars from the assembled page
+    # The mobile action bar goes in here, not in the renderers: ten designs x five page
+    # types is fifty places to forget it, and every page ends with the same </body>.
+    if t is not None:
+        bar = action_bar(t, url)
+        if bar:
+            htmlstr = htmlstr.replace("</body>", bar + "</body>", 1)
     path = os.path.join(out, url.strip("/"), "index.html") if url != "/" else os.path.join(out, "index.html")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     open(path, "w", encoding="utf-8").write(htmlstr)
@@ -1571,22 +1636,22 @@ def build():
         for url, p in pages.items():
             if p["cat"] == "home":
                 continue
-            write(out, url, R["inner"](t, p, pages))
+            write(out, url, R["inner"](t, p, pages), t)
         # homepage
-        write(out, "/", R["home"](t, pages))
+        write(out, "/", R["home"](t, pages), t)
         # section index pages
         if any(p["cat"] == "service" for p in pages.values()):
             write(out, "/services/", R["index"](t, pages, "service", "/services/",
                   f"Garage Door Services in {t['city']}", "What We Do",
-                  f"Repair, installation and service for garage doors across {t['city']} and nearby."))
+                  f"Repair, installation and service for garage doors across {t['city']} and nearby."), t)
         if any(p["cat"] == "area" for p in pages.values()):
             write(out, "/service-areas/", R["index"](t, pages, "area", "/service-areas/",
                   f"Service Areas Around {t['city']}", "Where We Work",
-                  f"Neighborhoods and suburbs we cover across the {t['city']} metro."))
+                  f"Neighborhoods and suburbs we cover across the {t['city']} metro."), t)
         if any(p["cat"] == "guide" for p in pages.values()):
             write(out, "/guides/", R["index"](t, pages, "guide", "/guides/",
                   "Garage Door Guides", "Good to Know",
-                  "Plain-English answers about springs, openers, older doors and what a repair really involves."))
+                  "Plain-English answers about springs, openers, older doors and what a repair really involves."), t)
         # trust pages
         write(out, "/about/", R["trust"](t, pages, "/about/", f"About {t['brand']}", [
             ("A local garage door crew",
@@ -1603,13 +1668,13 @@ def build():
              f"Our techs are trained on the tools this work actually requires. Torsion springs are wound under enough tension to cause serious injury, and replacing one is the single job we always tell homeowners never to DIY. We carry proper insurance and stand behind the work, and because we live and work in {t['city']}, our reputation here is the whole business - which is why the crew treats every door like it belongs to a neighbor, because more often than not it does."),
             ("Ready when you are",
              f"Whether it's a door that won't open this morning or a replacement you've been putting off, {t['brand']} is one call away. {_reach(t)} for same-day service on most repairs, or request a written quote and we'll tell you honestly what your door needs - nothing more."),
-        ]))
+        ]), t)
         write(out, "/contact/", R["trust"](t, pages, "/contact/", f"Contact {t['brand']}", [
             ("Get in touch", f"{_reach(t)} to reach {t['brand']} for garage door repair, service or a new-door quote in {t['city']}, {t['st']}."),
-            ("Service area", f"We serve {t['city']} and the surrounding suburbs. Not sure if you're in range? Ask when you get in touch — we'll tell you straight.")]))
+            ("Service area", f"We serve {t['city']} and the surrounding suburbs. Not sure if you're in range? Ask when you get in touch — we'll tell you straight.")]), t)
         write(out, "/request-a-quote/", R["trust"](t, pages, "/request-a-quote/", f"Request a Garage Door Quote in {t['city']}", [
             ("Tell us what the door is doing", f"Describe the problem — noise, off-track, a broken spring, or a door you want replaced — and we'll give you a written price. {_reach(t, form_first=True)}."),
-            ("Fast, no-pressure quotes", "You get a real number, not a range, once we've seen the door. Same-day service is available on most repairs.")], True))
+            ("Fast, no-pressure quotes", "You get a real number, not a range, once we've seen the door. Same-day service is available on most repairs.")], True), t)
 
         # sitemap / robots
         urls = sorted(set(["/"] + [p["url"] for p in pages.values() if p["cat"] != "home"]
