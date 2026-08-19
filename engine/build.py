@@ -1684,6 +1684,35 @@ def build():
             f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{sm}</urlset>')
         open(os.path.join(out, "robots.txt"), "w", encoding="utf-8").write(
             f"User-agent: *\nAllow: /\nSitemap: https://{domain}/sitemap.xml\n")
+
+        # Vercel config, written per site so `vercel deploy dist/<domain>` needs no
+        # extra setup. It lives in dist/ (regenerated each build), not in the repo,
+        # because build() rmtree's dist/ on every run.
+        #
+        # trailingSlash: every internal link the engine emits ends in "/" and each page
+        # is a directory index, so this keeps "/services" and "/services/" from being
+        # two URLs. No cleanUrls: that would strip the slash and fight the same links.
+        #
+        # Caching is deliberately conservative on CSS/JS: those filenames are NOT
+        # content-hashed, so a long immutable max-age would serve a stale stylesheet
+        # after the next deploy. Photos are cached longer -- their names are stable and
+        # tied to the content that chose them.
+        open(os.path.join(out, "vercel.json"), "w", encoding="utf-8").write(json.dumps({
+            "$schema": "https://openapi.vercel.sh/vercel.json",
+            "trailingSlash": True,
+            "headers": [
+                {"source": "/(.*)", "headers": [
+                    {"key": "X-Content-Type-Options", "value": "nosniff"},
+                    {"key": "Referrer-Policy", "value": "strict-origin-when-cross-origin"},
+                ]},
+                {"source": "/assets/photos/(.*)", "headers": [
+                    {"key": "Cache-Control", "value": "public, max-age=604800"},
+                ]},
+                {"source": "/assets/(.*).(css|js)", "headers": [
+                    {"key": "Cache-Control", "value": "public, max-age=0, must-revalidate"},
+                ]},
+            ],
+        }, indent=2))
         built += 1
         print(f"  {domain}: {len(urls)} pages ({t['city']}, {t['st']})")
     print(f"Done -> {DIST}  ({built} sites)")
