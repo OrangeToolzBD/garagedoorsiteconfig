@@ -852,12 +852,18 @@ VARIANT_CSS = """
 .v-btn-wide .tc-cta,.v-btn-wide .hb-cta__btn,.v-btn-wide .pg-btn,.v-btn-wide .hb-emerg__btn{
   border-radius:8px;padding-left:34px;padding-right:34px;letter-spacing:.02em}
 /* ---- cards ---- */
+/* The card axis sets the *treatment* (shadow / border / edge). Corner radius goes
+   through --v-card-r so a design keeps its own roundness: nimbus is a soft 26px design
+   and a hard-coded 10px here fought that, making its cards look like a different site's.
+   Designs that want square corners set --v-card-r:0. */
 .v-card-raised .hb-svc,.v-card-raised .hb-guide,.v-card-raised .hb-sig,.v-card-raised .hb-door,
-.v-card-raised .hb-tip,.v-card-raised .hb-seg{box-shadow:0 10px 30px rgba(15,23,42,.10);border-radius:16px;overflow:hidden}
+.v-card-raised .hb-tip,.v-card-raised .hb-seg{box-shadow:0 10px 30px rgba(15,23,42,.10);
+  border-radius:var(--v-card-r,16px);overflow:hidden}
 .v-card-flat .hb-svc,.v-card-flat .hb-guide,.v-card-flat .hb-sig,.v-card-flat .hb-door,
-.v-card-flat .hb-tip,.v-card-flat .hb-seg{box-shadow:none;border-radius:0}
+.v-card-flat .hb-tip,.v-card-flat .hb-seg{box-shadow:none;border-radius:var(--v-card-r,0)}
 .v-card-outline .hb-svc,.v-card-outline .hb-guide,.v-card-outline .hb-sig,.v-card-outline .hb-door,
-.v-card-outline .hb-tip,.v-card-outline .hb-seg{box-shadow:none;border:1px solid currentColor;border-color:color-mix(in srgb,currentColor 18%,transparent);border-radius:10px}
+.v-card-outline .hb-tip,.v-card-outline .hb-seg{box-shadow:none;border:1px solid currentColor;
+  border-color:color-mix(in srgb,currentColor 18%,transparent);border-radius:var(--v-card-r,10px)}
 .v-card-edge .hb-svc,.v-card-edge .hb-guide,.v-card-edge .hb-door,.v-card-edge .hb-tip{
   box-shadow:none;border-radius:0;border-left:3px solid var(--accent,currentColor)}
 /* ---- images ---- */

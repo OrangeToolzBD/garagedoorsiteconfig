@@ -814,6 +814,77 @@ def nim_trust(t, pages, url, h1, blocks, is_quote=False):
             + _nim_footer(t, pages) + "</body></html>")
 
 
+NIM_BLOCKS = r'''
+/* --- shared section blocks, nimbus dress: rounded, soft, pastel-tinted --- */
+:root{--v-card-r:26px}   /* keep nimbus's roundness under every card variant */
+.hb-eyebrow{color:var(--blue);font-weight:800}
+.hb h2{font-family:"Baloo 2",cursive;font-weight:800}
+.hb--svc,.hb--sig,.hb--faq{background:var(--sky)}
+.hb--tips,.hb--doors{background:var(--mint)}
+.hb--about,.hb--local,.hb--safety{background:#fff}
+.hb--stats{background:var(--peach);padding:0}
+.hb-statrow{padding:34px 0}
+.hb-stat b{font-family:"Baloo 2",cursive;color:var(--blue)}
+.hb-svc,.hb-guide,.hb-sig,.hb-door,.hb-tip,.hb-seg,.hb-rev{
+  background:#fff;border:0;border-radius:var(--r);box-shadow:0 10px 26px rgba(44,58,73,.08)}
+.hb-svc__img img,.hb-guide__img img,.hb-door__img img{border-radius:var(--r) var(--r) 0 0}
+.hb-svc:hover,.hb-guide:hover,.hb-door:hover{transform:translateY(-5px);box-shadow:0 16px 34px rgba(44,58,73,.13)}
+.hb-more{color:var(--blue);font-weight:800}
+.hb-step__n{background:var(--blue);color:#fff;border-radius:50%}
+.hb-areas a{background:#fff;border-radius:999px;text-align:center;font-weight:700;
+  box-shadow:0 6px 16px rgba(44,58,73,.07)}
+.hb-areas a:hover{background:var(--blue);color:#fff}
+.hb-atier h3{color:var(--soft)}
+.hb-faq{background:#fff;border-radius:20px;padding:18px 24px;margin-bottom:12px;border:0}
+.hb-faq summary{font-family:"Baloo 2",cursive;font-weight:700}
+.hb-rvr__c{background:#fff;border-radius:var(--r);box-shadow:0 10px 26px rgba(44,58,73,.08)}
+.hb-rvr__c--alt{background:var(--lilac);box-shadow:none}
+.hb-safety{background:var(--peach);border-radius:var(--r);padding:34px}
+.hb-emerg{background:#fff;border-radius:var(--r);padding:26px 30px;box-shadow:0 10px 26px rgba(44,58,73,.08)}
+.hb-emerg__btn{background:var(--blue);color:#fff;border-radius:999px}
+.hb--cta{background:linear-gradient(135deg,var(--sky),var(--mint))}
+.hb--cta .hb-cta__btn{background:var(--blue);color:#fff;border-radius:999px}
+.hb--cta .hb-cta__btn--alt{background:#fff;color:var(--blue)}
+'''
+
+IRON_BLOCKS = r'''
+/* --- shared section blocks, ironclad dress: paper, hairline rules, brass, no shadow --- */
+:root{--v-card-r:0}      /* ironclad is square-cornered throughout */
+.hb-eyebrow{color:var(--brass);letter-spacing:.28em;font-size:.7rem}
+.hb h2{font-family:"Playfair Display",Georgia,serif;font-weight:700;letter-spacing:normal}
+.hb--svc,.hb--sig,.hb--faq,.hb--stats{background:var(--cream)}
+.hb--about,.hb--local,.hb--safety,.hb--tips,.hb--doors{background:var(--paper)}
+.hb-lead,.hb-prose{color:var(--muted)}
+.hb-svc,.hb-guide,.hb-sig,.hb-door,.hb-tip,.hb-seg,.hb-rev{
+  background:var(--paper);border:1px solid var(--rule);border-radius:0;box-shadow:none}
+.hb-svc:hover,.hb-guide:hover,.hb-door:hover{border-color:var(--brass)}
+.hb-svc h3,.hb-guide h3,.hb-door h3,.hb-tip h3,.hb-sig h3{
+  font-family:"Playfair Display",Georgia,serif;font-weight:700}
+.hb-svc__img img,.hb-guide__img img,.hb-door__img img{filter:grayscale(.2)}
+.hb-svc:hover .hb-svc__img img,.hb-guide:hover .hb-guide__img img{filter:none}
+.hb-more{color:var(--brass);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;font-weight:600}
+.hb-step__n{background:none;color:var(--brass);border:1px solid var(--brass);border-radius:0;
+  font-family:"Playfair Display",serif}
+.hb-statrow{padding:30px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.hb-stat b{font-family:"Playfair Display",serif;color:var(--brass)}
+.hb-areas a{border:1px solid var(--rule);border-radius:0;font-size:.9rem}
+.hb-areas a:hover{border-color:var(--brass);color:var(--brass)}
+.hb-atier h3{color:var(--brass)}
+.hb-faq{border-bottom:1px solid var(--rule)}
+.hb-faq summary{font-family:"Playfair Display",Georgia,serif;font-size:1.15rem}
+.hb-rvr__c{border:1px solid var(--rule)}
+.hb-rvr__c--alt{background:var(--cream)}
+.hb-safety{border-left:2px solid var(--brass);padding-left:28px}
+.hb-emerg{border-top:1px solid var(--ink);border-bottom:1px solid var(--ink)}
+.hb-emerg__btn{border:1px solid var(--brass);color:var(--brass);letter-spacing:.18em;
+  text-transform:uppercase;font-size:.72rem}
+.hb--cta{background:var(--ink);color:var(--cream)}
+.hb--cta .hb-cta__btn{background:var(--brass);color:#fff;letter-spacing:.18em;
+  text-transform:uppercase;font-size:.74rem}
+.hb--cta .hb-cta__btn--alt{background:none;border:1px solid var(--cream);color:var(--cream)}
+'''
+
+
 # ---------------------------------------------------------------- registry
 # note: inner() takes (t, p, pages) in build.py's GARAGE lambda, but our functions use
 # (t, pages, p); adapt with a wrapper so the interface matches build.py exactly.
@@ -2162,9 +2233,9 @@ REGISTRY = {
     # height attributes (800x600 each), which inflated the guides section to 3704px and
     # the door-styles section to 4378px, and .hb-wrap had no max-width so copy ran to the
     # window edge.
-    "ironclad": _mk(IRON_CSS + DARK_FOOT_LOGO, iron_home, iron_inner, iron_index, iron_trust,
+    "ironclad": _mk(IRON_CSS + IRON_BLOCKS + DARK_FOOT_LOGO, iron_home, iron_inner, iron_index, iron_trust,
                     blocks=True),
-    "nimbus":   _mk(NIM_CSS, nim_home, nim_inner, nim_index, nim_trust, blocks=True),
+    "nimbus":   _mk(NIM_CSS + NIM_BLOCKS, nim_home, nim_inner, nim_index, nim_trust, blocks=True),
     "forge":    _design(FORGE_FONTS, FORGE_CSS + DARK_FOOT_LOGO + DARK_BAR_LOGO, forge_home),
     "coastline": _design(COAST_FONTS, COAST_CSS, coast_home),
     "beacon":   _design(BEACON_FONTS, BEACON_CSS + DARK_FOOT_LOGO + DARK_BAR_LOGO, beacon_home, cta="Free Quote"),
