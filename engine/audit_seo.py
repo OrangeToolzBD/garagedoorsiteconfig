@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 """Audit built sites for SEO / AEO / GEO signals."""
+import glob
+import html
 import json
 import os
 import re
-import glob
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DIST = os.path.join(ROOT, "dist")
@@ -25,15 +26,22 @@ def audit_page(fp, domain):
     def find(pat):
         m = re.search(pat, h, re.I | re.S)
         return m.group(1).strip() if m else ""
-    title = find(r"<title>(.*?)</title>")
-    desc = find(r'<meta name="description" content="(.*?)"')
+    # unescape before measuring: "&amp;" is one character to a searcher, five in source,
+    # which made compliant titles read as 4 chars over the limit.
+    title = html.unescape(find(r"<title>(.*?)</title>"))
+    desc = html.unescape(find(r'<meta name="description" content="(.*?)"'))
     canon = bool(re.search(r'<link rel="canonical"', h, re.I))
     og = len(re.findall(r'<meta property="og:', h, re.I))
     tw = bool(re.search(r'name="twitter:card"', h, re.I))
     h1 = re.findall(r"<h1[ >]", h, re.I)
     h2 = re.findall(r"<h2[ >]", h, re.I)
     imgs = re.findall(r"<img\b[^>]*>", h, re.I)
-    imgs_alt = [i for i in imgs if re.search(r'alt="[^"]+"', i)]
+    # An `alt=""` is a valid, deliberate choice: it marks an image as decorative so a
+    # screen reader skips it. The brand mark beside the visible business name is
+    # exactly that case. Counting those as failures reported 30-82 "missing alt" per
+    # site against markup that was already correct -- only a *missing* alt attribute
+    # is a defect.
+    imgs_alt = [i for i in imgs if re.search(r'\balt=', i, re.I)]
     jsonld = re.findall(r'<script type="application/ld\+json">(.*?)</script>', h, re.S)
     types = []
     for block in jsonld:
@@ -41,8 +49,16 @@ def audit_page(fp, domain):
             data = json.loads(block)
             objs = data if isinstance(data, list) else data.get("@graph", [data])
             for o in objs:
-                if isinstance(o, dict) and o.get("@type"):
-                    types.append(o["@type"])
+                if not isinstance(o, dict):
+                    continue
+                # "@type" is legitimately either a string or a list of strings
+                # (org_schema emits ["LocalBusiness","HomeAndConstructionBusiness"]).
+                # Flatten so callers always get plain, hashable strings.
+                ty = o.get("@type")
+                if isinstance(ty, list):
+                    types.extend(str(x) for x in ty)
+                elif ty:
+                    types.append(str(ty))
         except Exception:
             types.append("PARSE_ERROR")
     internal = len(re.findall(r'href="/[^"]*"', h))
@@ -64,6 +80,8 @@ def main():
     for domain in DOMAINS:
         root = os.path.join(DIST, domain)
         pages = glob.glob(os.path.join(root, "**", "index.html"), recursive=True)
+        if not pages:
+            continue   # registered but not built (no content/ folder yet) -- nothing to audit
         rows = [audit_page(p, domain) for p in pages]
         n = len(rows)
         home = next((r for r in rows if True), {})

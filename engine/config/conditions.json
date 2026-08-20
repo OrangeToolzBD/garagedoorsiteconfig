@@ -1,0 +1,185 @@
+{
+  "_comment": "Local operating conditions that drive per-city guide pages, homepage copy and FAQ entries. THIS IS THE FIX FOR CROSS-CITY DUPLICATE CONTENT: a Phoenix site and a Duluth site write about genuinely different problems, so their pages differ by construction rather than by swapping a city name. Conditions are keyed by STATE on purpose. State-level climate claims ('Arizona summers run long and extremely hot') are defensible for every city in that state; city-level claims ('Agoura Hills sits in a Very High Fire Hazard Severity Zone') are not something the engine can know for 1000 cities without inventing it. Add a city override under \"cities\" (keyed by the site's content slug, e.g. 'boone-nc') when someone has actually checked that city. {city} and {st} are substituted at build time. Unlisted states fall back to \"_default\".",
+
+  "conditions": {
+    "heat": {
+      "title": "Summer Heat and Your Garage Door in {city}",
+      "summary": "How long, hot summers wear on garage door seals, hardware and opener electronics in {city}, {st}.",
+      "body": [
+        "An attached garage is usually the hottest room of a house in summer. It is uninsulated more often than not, it faces the sun for most of the day, and it has a large uninsulated panel for a wall. Through a {city} summer the air inside can sit well above the outdoor temperature for weeks at a time, and everything bolted to that door lives in it.",
+        "Heat is hardest on the parts that are not metal. The bottom weather seal is the first to go: it softens, flattens under the door's own weight, and stops sealing, which is how dust and insects start getting in. Lubricant thins and runs off rollers and hinges, so bearings that were quiet in spring start squealing by August.",
+        "Opener electronics are the other common casualty. The logic board and the safety sensors sit in that same hot air, and heat shortens their life. A door that works fine in the morning and refuses in the afternoon is a classic warm-weather symptom, and it is usually the opener rather than the door.",
+        "None of this is dramatic and none of it is sudden, which is exactly why it gets missed. A seal check and a re-lubrication before the hottest stretch is a short job that prevents most of it."
+      ],
+      "faq": [
+        {"q": "Why does my garage door opener act up in the afternoon and work fine in the morning?",
+         "a": "Heat. Opener boards and safety sensors sit in the hottest air in the house by mid-afternoon, and marginal electronics fail warm and recover cool. If the fault tracks the time of day rather than the door's condition, the opener is the place to look."},
+        {"q": "How often should the bottom seal be replaced in a hot climate?",
+         "a": "Sooner than in a mild one. Once the seal has taken a permanent set and no longer springs back, it is not sealing, and no amount of adjustment brings it back."}
+      ]
+    },
+
+    "freeze": {
+      "title": "Cold Weather and Your Garage Door in {city}",
+      "summary": "How freezing winters and repeated freeze-thaw cycles affect garage door springs, seals and openers in {city}, {st}.",
+      "body": [
+        "Cold is the hardest season on a garage door, and it is the season most spring failures happen in. Steel contracts as it cools and becomes a little less forgiving, so a torsion spring that is already near the end of its cycle life is far more likely to let go on a freezing morning than a mild afternoon. That is why the bang so often happens in winter.",
+        "The bottom seal is the other winter problem. Rubber stiffens in the cold, and if there is any water on the slab when the door closes, the seal can freeze to the ground overnight. An opener that meets that resistance will usually reverse and refuse. Forcing it is what bends panels and pulls the opener bracket loose.",
+        "Repeated freeze-thaw cycles matter as much as absolute cold in {city}. Water gets into gaps, expands as it freezes, and works joints and fixings loose a fraction at a time. Track bolts and hinge screws that were tight in autumn are often visibly loose by spring.",
+        "Cold also thickens grease. A door that runs stiff on the coldest mornings is often just lubricated with the wrong product for the season rather than genuinely faulty."
+      ],
+      "faq": [
+        {"q": "Why do garage door springs break in winter?",
+         "a": "Steel contracts and gets slightly more brittle as it cools, so a spring already near the end of its cycle life is likeliest to fail on a cold morning. The cold does not wear the spring out - it finishes off a spring that was already close."},
+        {"q": "My door will not close in freezing weather and reverses instead. Why?",
+         "a": "Usually the bottom seal has frozen to the slab, or ice has built up under it. The opener meets resistance and reverses, which is the safety system working. Free the seal and clear the ice rather than forcing the door."}
+      ]
+    },
+
+    "storm": {
+      "title": "Storms, Wind and Your Garage Door in {city}",
+      "summary": "How severe storms and high winds affect garage doors in {city}, {st}, and what to check afterwards.",
+      "body": [
+        "The garage door is the largest opening in most houses, and in a storm it takes the most wind load of anything on the building. A door does not have to fail outright to be damaged: a strong gust can flex the panels enough to rack the door slightly in its tracks, and it will keep operating afterwards while running rough.",
+        "That is why a post-storm check is worth doing even when nothing looks wrong. Watch the door go up and down once with the opener, and listen. A new rattle, a catch at the same point in the travel, or a door that visibly shudders usually means the track alignment or the rollers have moved.",
+        "Wind-driven debris is the other risk. A strike that dents a panel can also bend a track or a hinge, and a bent track is what turns a working door into a door that jumps off its rollers a month later.",
+        "If a door has been struck, or if it was open during a strong storm in {city}, it is worth having the balance checked. A door that is out of balance puts the extra load onto the opener, and the opener is the more expensive part."
+      ],
+      "faq": [
+        {"q": "My garage door survived the storm but sounds different now. Is that a problem?",
+         "a": "Usually yes. A new noise after a storm normally means something moved - track alignment, a roller, or a hinge. It is cheap to correct at that stage and expensive once the door has been running out of true for a while."},
+        {"q": "Should I leave the garage door open or closed in high wind?",
+         "a": "Closed. A closed door is braced by its own tracks and hardware. An open door leaves the garage - and the roof structure above it - exposed to wind getting inside the building."}
+      ]
+    },
+
+    "humidity": {
+      "title": "Humidity, Damp and Your Garage Door in {city}",
+      "summary": "How humid air and persistent damp affect garage door hardware, tracks and openers in {city}, {st}.",
+      "body": [
+        "Humidity works slowly and quietly on a garage door. Damp air condenses on cold metal overnight, and the parts that stay wet longest - the bottom of the tracks, the hinges, the spring itself - are where corrosion starts. It rarely announces itself; a door just gets gradually louder and stiffer over a season or two.",
+        "Corrosion on a spring matters more than corrosion anywhere else. Surface rust adds friction between the coils and creates the small pits where a fracture eventually begins, which is why a rusty spring tends to fail earlier than a clean one of the same age.",
+        "Wooden doors and wooden trim have a second problem in a damp climate in {city}: they take on moisture, swell, and bind in the opening. A wooden door that closed cleanly in a dry spell and sticks in a wet one is usually not faulty, it is just wet.",
+        "The fix is unglamorous and effective: keep the tracks clear, keep the moving parts lightly lubricated so water cannot sit on bare steel, and make sure the garage gets some ventilation."
+      ],
+      "faq": [
+        {"q": "Does humidity really shorten the life of a garage door spring?",
+         "a": "Yes. Rust adds friction between the coils and creates the pitting where a fracture starts, so a corroded spring generally fails earlier than a clean one of the same age and cycle count."},
+        {"q": "My wooden garage door sticks in wet weather but not in dry. Why?",
+         "a": "Wood takes on moisture and swells, so the door is fractionally larger in the opening than it was. It is worth confirming that is all it is before anyone starts planing or adjusting a door that is not actually misaligned."}
+      ]
+    },
+
+    "coastal": {
+      "title": "Salt Air and Your Garage Door in {city}",
+      "summary": "How coastal salt air accelerates corrosion on garage door springs, hardware and openers near {city}, {st}.",
+      "body": [
+        "Salt air is the most aggressive ordinary environment a garage door has to live in. Salt settles on every surface, holds moisture against the metal long after the air has dried, and keeps corrosion running when it would otherwise stop. Hardware that would last many years inland can need replacing far sooner near the coast.",
+        "Springs and cables are the parts to watch. A cable is many thin strands, so it has a great deal of surface area for its size and corrodes from the inside of the bundle where it cannot be seen. A cable that looks slightly furred rather than smooth is worth replacing before it strands.",
+        "Fixings suffer in the same way. Track bolts, hinge screws and the opener's mounting hardware are what actually hold the door to the building, and they are usually plain steel unless someone specified otherwise.",
+        "For coastal homes near {city} it is worth asking for galvanised or coated hardware when parts are replaced, and rinsing the door down occasionally - the same logic as rinsing a car."
+      ],
+      "faq": [
+        {"q": "How much shorter is garage door hardware life near the coast?",
+         "a": "Meaningfully shorter, and it depends on how exposed the property is and whether the hardware is coated. The important part is that springs and cables are the components that fail dangerously, so they are the ones to inspect more often rather than less."},
+        {"q": "Is it worth paying for galvanised hardware in a coastal area?",
+         "a": "Generally yes. The extra cost is small next to a repeat callout, and it is the difference between corrosion being slow and being the reason for the next repair."}
+      ]
+    },
+
+    "dust": {
+      "title": "Dust, Grit and Your Garage Door in {city}",
+      "summary": "How airborne dust and grit affect garage door rollers, tracks and safety sensors in {city}, {st}.",
+      "body": [
+        "Dust is a lubrication problem in disguise. Grease and oil on rollers and hinges catch airborne grit, and the mixture turns into a mild grinding paste. That paste wears roller bearings and track surfaces far faster than clean lubricant ever would, which is why over-lubricating in a dusty area is worse than lubricating lightly.",
+        "The safety sensors near the floor are the other casualty. A film of dust on the lens is enough to break the beam intermittently, and an intermittent beam produces the most confusing fault on a garage door: the door closes fine sometimes and reverses for no visible reason other times.",
+        "The bottom seal matters more in a dusty climate than most people expect. Once it has flattened out and stopped meeting the slab cleanly, dust simply blows under the door, and a garage that gets dusty inside is usually telling you the seal is finished.",
+        "A wipe of the sensor lenses and a look at the seal takes a couple of minutes and prevents most dust-related callouts around {city}."
+      ],
+      "faq": [
+        {"q": "My garage door reverses randomly. What causes that?",
+         "a": "Most often the safety sensors, and most often dust on the lenses rather than a fault. A wipe with a dry cloth resolves a surprising share of intermittent reversing."},
+        {"q": "Should I use more grease if the door is in a dusty area?",
+         "a": "No - less, and the right kind. Heavy grease collects grit and turns into a grinding paste. A light application of a proper garage door lubricant is better than a thick coat of anything."}
+      ]
+    },
+
+    "seasonal": {
+      "title": "Seasonal Wear and Your Garage Door in {city}",
+      "summary": "How the swing between seasons affects garage door balance, hardware and openers in {city}, {st}.",
+      "body": [
+        "A garage door is a large steel assembly that expands and contracts with the seasons, and it goes through that cycle while being operated a few thousand times a year. Most of what goes wrong with a door is that cycling, not any single event.",
+        "Balance drifts first. Springs lose a little tension over their life, so a door that was perfectly balanced when it was installed gradually becomes slightly heavy, and the opener quietly takes up the difference. The opener usually gets blamed when it eventually gives up, but the spring is normally the underlying cause.",
+        "Fixings work loose over the same period. Every cycle puts a small shock through the hinges, roller brackets and track bolts, and over a few thousand cycles that adds up to visible movement.",
+        "The useful habit for homeowners in {city} is a balance test twice a year: release the opener, lift the door halfway by hand, and let go. A balanced door stays roughly where it is put. A door that drops or climbs is telling you the springs need attention - before they take the opener with them."
+      ],
+      "faq": [
+        {"q": "How do I know if my garage door is properly balanced?",
+         "a": "Release the opener, raise the door about halfway by hand and let go. A balanced door stays about where you left it. If it falls or rises on its own, the spring tension is off and the opener is carrying weight it was not designed to carry."},
+        {"q": "How often should a garage door be serviced?",
+         "a": "Once a year for a door in normal use, and twice for a door that cycles many times a day. Most of that visit is inspection and adjustment rather than replacing parts."}
+      ]
+    }
+  },
+
+  "states": {
+    "AZ": ["heat", "dust", "storm"],
+    "NV": ["heat", "dust", "seasonal"],
+    "NM": ["heat", "dust", "storm"],
+    "TX": ["heat", "storm", "humidity"],
+    "OK": ["storm", "heat", "seasonal"],
+    "FL": ["storm", "humidity", "coastal"],
+    "LA": ["humidity", "storm", "coastal"],
+    "MS": ["humidity", "storm", "seasonal"],
+    "AL": ["humidity", "storm", "seasonal"],
+    "GA": ["humidity", "heat", "storm"],
+    "SC": ["humidity", "coastal", "storm"],
+    "NC": ["humidity", "storm", "seasonal"],
+    "TN": ["humidity", "storm", "seasonal"],
+    "AR": ["humidity", "storm", "seasonal"],
+    "MO": ["storm", "freeze", "seasonal"],
+    "KS": ["storm", "freeze", "seasonal"],
+    "NE": ["freeze", "storm", "seasonal"],
+    "IA": ["freeze", "storm", "seasonal"],
+    "MN": ["freeze", "storm", "seasonal"],
+    "WI": ["freeze", "storm", "seasonal"],
+    "MI": ["freeze", "humidity", "seasonal"],
+    "IL": ["freeze", "storm", "humidity"],
+    "IN": ["freeze", "storm", "seasonal"],
+    "OH": ["freeze", "humidity", "seasonal"],
+    "PA": ["freeze", "humidity", "seasonal"],
+    "NY": ["freeze", "humidity", "seasonal"],
+    "NJ": ["freeze", "coastal", "humidity"],
+    "CT": ["freeze", "coastal", "humidity"],
+    "MA": ["freeze", "coastal", "storm"],
+    "RI": ["freeze", "coastal", "humidity"],
+    "NH": ["freeze", "seasonal", "humidity"],
+    "VT": ["freeze", "seasonal", "humidity"],
+    "ME": ["freeze", "coastal", "seasonal"],
+    "MD": ["humidity", "freeze", "coastal"],
+    "DE": ["humidity", "coastal", "freeze"],
+    "VA": ["humidity", "storm", "seasonal"],
+    "WV": ["freeze", "humidity", "seasonal"],
+    "KY": ["humidity", "freeze", "seasonal"],
+    "CO": ["freeze", "storm", "seasonal"],
+    "UT": ["freeze", "heat", "dust"],
+    "WY": ["freeze", "storm", "seasonal"],
+    "MT": ["freeze", "seasonal", "storm"],
+    "ID": ["freeze", "seasonal", "dust"],
+    "ND": ["freeze", "storm", "seasonal"],
+    "SD": ["freeze", "storm", "seasonal"],
+    "WA": ["humidity", "seasonal", "freeze"],
+    "OR": ["humidity", "seasonal", "coastal"],
+    "CA": ["heat", "coastal", "dust"],
+    "AK": ["freeze", "humidity", "seasonal"],
+    "HI": ["coastal", "humidity", "seasonal"]
+  },
+
+  "cities": {
+    "_comment": "Per-city overrides, keyed by the site's `content` slug. Use these only where someone has actually verified the local condition for that city - the state defaults above are the safe fallback.",
+    "punta-gorda-fl": ["coastal", "storm", "humidity"],
+    "boone-nc": ["freeze", "seasonal", "humidity"]
+  },
+
+  "_default": ["seasonal", "freeze", "humidity"]
+}

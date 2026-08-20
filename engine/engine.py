@@ -23,9 +23,10 @@ sys.path.insert(0, ROOT)
 
 
 def cmd_build(_a):
-    import build_site
-    build_site.build()
-    print("Built -> dist/")
+    # build.py is the garage-door renderer (JSON content). build_site.py is the
+    # legacy markdown/porta-potty renderer and does nothing useful for this niche.
+    import build
+    build.build()
 
 
 def cmd_serve(_a):
@@ -154,36 +155,36 @@ def cmd_new(a):
     print(f"  3) python engine.py serve  # preview on http://localhost:{port}/")
 
 
+# The ten selectable designs. bulk spreads registrations across them so a batch of
+# 1000 domains does not land on one look; a site can still be moved by editing its
+# "template" in sites.json.
+DESIGNS = ["garage", "ironclad", "nimbus", "forge", "coastline",
+           "beacon", "atlas", "hearth", "quarry", "verdant"]
+
+
 def cmd_bulk(a):
     """Register every domain in the sheet into sites.json (+ colour-matched themes).
-    Idempotent: skips domains already registered. Content dirs are still added later.
-    Auto-assigns layout variations to ensure each site looks unique."""
+    Idempotent: skips domains already registered. Content dirs are added later.
+
+    This used to call layouts.py to store a per-domain layout assignment, which was
+    broken two ways: it raised KeyError on the first new domain (config/layouts.json
+    is a dict of *named* variants and has no "layouts" list to append to), so the whole
+    command was a no-op; and build.py never read that data anyway - it looks layouts up
+    by name. Everything that assignment was meant to achieve is now derived from the
+    domain at build time by build.recipe(), so nothing needs storing.
+    """
     import csv
-    try:
-        from layouts import get_layout_for_site
-    except ImportError:
-        print("! layouts.py not found; layout variations will not be assigned")
-        get_layout_for_site = None
-    
     sheet = a.sheet or os.path.join(os.path.dirname(ROOT), "domains.csv")
     if not os.path.exists(sheet):
         print(f"! sheet not found: {sheet}"); return
     themes_path = os.path.join(CONFIG, "themes.json")
     sites_path = os.path.join(CONFIG, "sites.json")
-    layouts_path = os.path.join(CONFIG, "layouts.json")
-    
+
     themes = json.load(open(themes_path, encoding="utf-8"))
     data = json.load(open(sites_path, encoding="utf-8"))
     sites = data["sites"]
     have = {s["domain"] for s in sites}
     port = max([s.get("port", 0) for s in sites] + [8200])
-    
-    # Load or initialize layouts file
-    if os.path.exists(layouts_path) and get_layout_for_site:
-        layouts = json.load(open(layouts_path, encoding="utf-8"))
-    else:
-        layouts = {"layouts": []}
-    layout_domains = {l["domain"] for l in layouts.get("layouts", [])}
     
     rows = [r for r in csv.DictReader(open(sheet, encoding="utf-8-sig"))
             if (r.get("Domain (Purchased)") or "").strip()]
@@ -202,34 +203,24 @@ def cmd_bulk(a):
         if theme not in themes:
             themes[theme] = theme_from_color(color)
         port += 1
-        
-        # Assign unique layout variation
         site_index = len(sites)
-        layout_assignment = None
-        if get_layout_for_site and domain not in layout_domains:
-            layout_assignment = get_layout_for_site(site_index)
-        
         sites.append({
             "domain": domain, "city": city, "st": st,
             "content": f"{_slug(city)}-{st.lower()}", "brand": brand,
             "tagline": a.tagline or GD_TAGLINE, "area": "", "street": "", "zip": "",
             "phone": "", "theme": theme, "layout": LAYOUTS[site_index % len(LAYOUTS)],
+            # written explicitly rather than derived, so a teammate can see which design
+            # a site is on and move it by editing one field
+            "template": DESIGNS[site_index % len(DESIGNS)],
             "port": port,
         })
-        
-        # Store layout variation
-        if get_layout_for_site and domain not in layout_domains and layout_assignment:
-            layouts["layouts"].append({"domain": domain, **layout_assignment})
-        
         have.add(domain); added += 1
     json.dump(themes, open(themes_path, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
     json.dump(data, open(sites_path, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
-    if get_layout_for_site and layouts.get("layouts"):
-        json.dump(layouts, open(layouts_path, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
-    
+
     print(f"Registered {added} new sites (skipped {skipped} already-present); total now {len(sites)}.")
-    if get_layout_for_site:
-        print(f"Auto-assigned {added} unique layout variations (see config/layouts.json)")
+    print(f"Spread across {len(DESIGNS)} designs; the rest of each site's look (nav, hero,")
+    print("buttons, cards, footer, type, spacing, section mix) is derived per domain at build time.")
     print("Each site builds once content/<city>-<st>/ exists (build.py skips sites with no content).")
 
 

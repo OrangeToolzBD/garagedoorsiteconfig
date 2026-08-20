@@ -408,8 +408,14 @@ CSS_TMPL = """
   --disp:'__DISPLAY__',system-ui,sans-serif;--body:'__BODY__',system-ui,sans-serif;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
+/* scroll-padding keeps in-page anchor targets clear of the sticky header */
+html{scroll-behavior:smooth;scroll-padding-top:96px}
+/* overflow-x:clip (NOT hidden) -- hidden would break position:sticky on the header */
 html,body{overflow-x:clip;max-width:100%}
+.skip{position:absolute;left:-9999px;top:0;z-index:200;background:var(--p);color:#fff;
+  padding:12px 18px;border-radius:0 0 10px 0;font-family:var(--disp);font-weight:700}
+.skip:focus{left:0;text-decoration:none}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 body{margin:0;font-family:var(--body);color:var(--ink);background:var(--bg);line-height:1.65;font-size:17px}
 h1,h2,h3,h4{font-family:var(--disp);line-height:1.12;letter-spacing:-.02em;margin:0 0 .5em;font-weight:700}
 h1{font-size:clamp(2.1rem,4.2vw,3.3rem);font-weight:800}
@@ -447,7 +453,11 @@ img{max-width:100%;display:block}
 .nav-cta-m{display:none}
 .nav-quote{display:none}
 header.site{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-.hd{display:flex;align-items:center;gap:12px;padding:12px 0}
+/* .hd is also a .wrap, so both rules declare `padding` at equal specificity and the
+   later one wins outright -- which used to strip the header's vertical padding below
+   560px and its horizontal gutter above it. The compound selector settles it in one
+   place: the header always states all four sides itself. */
+.wrap.hd{display:flex;align-items:center;gap:12px;padding:12px 24px}
 .brand{display:flex;align-items:center;gap:10px;font-family:var(--disp);font-weight:800;font-size:.9rem;color:var(--ink);flex:0 0 auto}
 .brand:hover{text-decoration:none}
 .brand>span{white-space:nowrap;line-height:1.08}
@@ -467,7 +477,11 @@ nav.main>a:hover,.nav-item>button:hover{background:var(--soft);text-decoration:n
 .mega{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%) translateY(6px);
   background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-lg);
   padding:14px;min-width:280px;opacity:0;visibility:hidden;transition:.16s;z-index:70}
-.nav-item:hover .mega{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+/* :hover alone left the desktop menus mouse-only -- the triggers are <button
+   aria-haspopup> elements, so a keyboard user could tab to one, press Enter and get
+   nothing, and a click did nothing above the mobile breakpoint. .open (set by nav.js
+   on click, now at every width) and :focus-within give those two paths a way in. */
+.nav-item:hover .mega,.nav-item.open .mega,.nav-item:focus-within .mega{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
 .mega a{display:block;padding:9px 12px;border-radius:9px;color:var(--ink);font-size:.94rem;font-weight:500}
 .mega a:hover{background:var(--soft);color:var(--p);text-decoration:none}
 .mega--areas{min-width:380px;display:grid;grid-template-columns:1fr 1fr;gap:2px 8px}
@@ -690,7 +704,7 @@ footer.site a.btn--ghost,footer.site a.btn--ghost:hover{color:#fff}
 .article .tw{overflow-x:auto;margin:1.4em 0}
 .aside{position:sticky;top:96px;align-self:start}
 .qcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:26px;text-align:center}
-.qcard h3{margin:0 0 8px}
+.qcard h3,.qcard h2{margin:0 0 8px;font-size:1.15rem;font-family:var(--disp);font-weight:700}
 .qcard p{color:var(--muted);font-size:.94rem}
 .qcard .tel{font-family:var(--disp);font-weight:800;font-size:1.5rem;color:var(--p);display:block;margin:8px 0 16px}
 .qcard .btn{width:100%;justify-content:center;margin-bottom:10px}
@@ -734,7 +748,7 @@ footer.site a.btn--ghost,footer.site a.btn--ghost:hover{color:#fff}
 @keyframes aDrop{from{transform:translateY(-14px);opacity:0}to{transform:none;opacity:1}}
 /* responsive */
 @media(max-width:1120px){
-  nav.main{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border-bottom:1px solid var(--line);flex-direction:column;align-items:stretch;padding:12px;gap:2px;box-shadow:var(--shadow-lg);max-height:calc(100vh - 70px);overflow-y:auto}
+  nav.main{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border-bottom:1px solid var(--line);flex-direction:column;align-items:stretch;padding:12px;gap:2px;box-shadow:var(--shadow-lg);max-height:calc(100vh - 70px);max-height:calc(100dvh - 70px);overflow-y:auto;overscroll-behavior:contain}
   nav.main.open{display:flex}
   /* pill-nav variant: reset the desktop pill so the mobile panel isn't a giant ellipse */
   .lay-nav-pill nav.main{border-radius:0;padding:12px;gap:2px;background:#fff}
@@ -753,7 +767,7 @@ footer.site a.btn--ghost,footer.site a.btn--ghost:hover{color:#fff}
   .hd .tel{display:none}
 }
 @media(max-width:720px){
-  .top .wrap{gap:10px;font-size:.8rem;justify-content:center}
+  .top .wrap{gap:10px;font-size:.8rem;justify-content:center;padding:8px 18px}
   .top span,.top .dot{display:none}
   .top a:not([href^="tel"]){display:none}
 }
@@ -774,6 +788,7 @@ footer.site a.btn--ghost,footer.site a.btn--ghost:hover{color:#fff}
   body{font-size:16px}
   .sec{padding:52px 0}
   .wrap{padding:0 18px}
+  .wrap.hd{padding:10px 18px}
   .g4,.g3{grid-template-columns:1fr}
   .scards--side{grid-template-columns:1fr}
   .trust .wrap{grid-template-columns:1fr}
@@ -787,37 +802,50 @@ footer.site a.btn--ghost,footer.site a.btn--ghost:hover{color:#fff}
 """
 
 NAVJS = """(function(){
+ // Must match the CSS breakpoint where nav.main becomes the burger panel
+ // (@media max-width:1120px). They disagreed before, which left the Services /
+ // Service Areas / Guides submenus impossible to open between 961px and 1120px.
+ var MOBILE='(max-width:1120px)';
  var b=document.querySelector('.burger'),n=document.querySelector('nav.main');
- if(b)b.addEventListener('click',function(){n.classList.toggle('open')});
+ function setExp(el,v){if(el)el.setAttribute('aria-expanded',v?'true':'false')}
+ if(b&&n){
+   setExp(b,false);
+   b.addEventListener('click',function(){setExp(b,n.classList.toggle('open'))});
+ }
  document.querySelectorAll('.nav-item>button').forEach(function(btn){
+   setExp(btn,false);
+   // Toggle at every width, not just below the mobile breakpoint. Desktop used to be
+   // hover-only, which meant clicking the trigger -- or reaching it by keyboard and
+   // pressing Enter -- did nothing at all.
    btn.addEventListener('click',function(e){
-     if(window.matchMedia('(max-width:960px)').matches){e.preventDefault();btn.parentNode.classList.toggle('open')}
+     e.preventDefault();setExp(btn,btn.parentNode.classList.toggle('open'));
    });
  });
- // scroll-reveal entrance animations
- (function(){
-   var root=document.documentElement;
-   if(!root.classList.contains('anim')) return;
-   if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-   var sel='.sec-head,.scard,.feat,.step,.pricewrap,.areas a,.cta-band,.faq details,'+
-           '.article .body>h2,.article .body>h3,.article .body>p,.article .body>ul,.article .body>ol,'+
-           '.article .body>.tw,.article .body>.faq,.article .body>img,.aside';
-   var els=[].slice.call(document.querySelectorAll(sel));
-   if(!els.length) return;
-   els.forEach(function(el){el.classList.add('reveal')});
-   // stagger items inside grids/lists
-   [].forEach.call(document.querySelectorAll('.grid,.steps,.areas,.faq'),function(g){
-     var i=0;[].forEach.call(g.children,function(c){if(c.classList.contains('reveal')){c.style.transitionDelay=(Math.min(i,6)*80)+'ms';i++;}});
+ // a click anywhere else closes an open desktop menu
+ document.addEventListener('click',function(e){
+   if(e.target.closest('header.site'))return;
+   document.querySelectorAll('.nav-item.open').forEach(function(i){
+     i.classList.remove('open');setExp(i.querySelector('button'),false);
    });
-   function showAll(){els.forEach(function(el){el.classList.add('in')});}
-   if(!('IntersectionObserver' in window)){showAll();return;}
-   var io=new IntersectionObserver(function(ents){
-     ents.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});
-   },{threshold:0.08,rootMargin:'0px 0px -5% 0px'});
-   els.forEach(function(el){io.observe(el)});
-   // safety net: never leave content hidden if the observer never fires
-   setTimeout(showAll,2600);
- })();
+ });
+ // close the mobile panel on Escape, and return focus to the burger
+ document.addEventListener('keydown',function(e){
+   if(e.key!=='Escape'||!n||!n.classList.contains('open'))return;
+   n.classList.remove('open');setExp(b,false);
+   document.querySelectorAll('.nav-item.open').forEach(function(i){
+     i.classList.remove('open');setExp(i.querySelector('button'),false);
+   });
+   if(b)b.focus();
+ });
+ // desktop hover menus: mirror the open state for screen readers
+ document.querySelectorAll('.nav-item').forEach(function(item){
+   var btn=item.querySelector('button');
+   item.addEventListener('mouseenter',function(){if(!window.matchMedia(MOBILE).matches)setExp(btn,true)});
+   item.addEventListener('mouseleave',function(){if(!window.matchMedia(MOBILE).matches)setExp(btn,false)});
+ });
+ // Scroll-reveal used to live here, which meant only the default design had it.
+ // It is now in build.py's shared FX module (FX_JS), injected into every page of
+ // every design, so there is one implementation rather than one per design.
 })();"""
 
 # ------------------------------------------------------------------ GHL quote form
