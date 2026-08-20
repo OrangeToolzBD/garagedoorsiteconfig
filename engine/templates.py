@@ -2155,8 +2155,16 @@ def verdant_home(t, pages):
 # `+ DARK_FOOT_LOGO` / `+ DARK_BAR_LOGO` where that design's footer / header is dark
 # and the logo artwork would otherwise disappear into it.
 REGISTRY = {
-    "ironclad": _mk(IRON_CSS + DARK_FOOT_LOGO, iron_home, iron_inner, iron_index, iron_trust),
-    "nimbus":   _mk(NIM_CSS, nim_home, nim_inner, nim_index, nim_trust),
+    # blocks=True on both: they were written before the shared section blocks existed and
+    # rendered only their own markup, so they were registered without PAGE_CSS/BLOCK_CSS.
+    # They now compose hb_* sections through hb_stack, and without that stylesheet the
+    # block markup arrived completely unstyled -- card images fell back to their width/
+    # height attributes (800x600 each), which inflated the guides section to 3704px and
+    # the door-styles section to 4378px, and .hb-wrap had no max-width so copy ran to the
+    # window edge.
+    "ironclad": _mk(IRON_CSS + DARK_FOOT_LOGO, iron_home, iron_inner, iron_index, iron_trust,
+                    blocks=True),
+    "nimbus":   _mk(NIM_CSS, nim_home, nim_inner, nim_index, nim_trust, blocks=True),
     "forge":    _design(FORGE_FONTS, FORGE_CSS + DARK_FOOT_LOGO + DARK_BAR_LOGO, forge_home),
     "coastline": _design(COAST_FONTS, COAST_CSS, coast_home),
     "beacon":   _design(BEACON_FONTS, BEACON_CSS + DARK_FOOT_LOGO + DARK_BAR_LOGO, beacon_home, cta="Free Quote"),
