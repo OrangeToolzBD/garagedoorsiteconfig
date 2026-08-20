@@ -554,7 +554,8 @@ def iron_home(t, pages):
               f'<div class="q"><span class="kick">Asked often</span>'
               f'<blockquote class="serif">{e(faqs[1][0]) if len(faqs) > 1 else "What does a visit cost?"}</blockquote>'
               f'<cite>{e(faqs[1][1]) if len(faqs) > 1 else "You get a written price on site before any work starts."}</cite></div></div></section>'
-            + hb_about(t, pages) + hb_segments(t, pages) + hb_stats(t, pages)
+            + hb_stack(t, pages, faqs, pin=("about", "safety"),
+                       drop=("services", "steps", "guides"))
             + f'<section class="sec est wrap"><div class="est__grid">'
               f'<div><span class="kick">Begin</span><h2 class="serif">Every door is a conversation.</h2>'
               f'<p>Tell us what yours is doing, and we\'ll tell you honestly what it needs — repair, restoration, or a fresh install for your {e(t["city"])} home.</p>'
@@ -763,7 +764,8 @@ def nim_home(t, pages):
             # This was three five-star "neighbor" testimonials with invented names
             # and quotes -- nobody said any of it. Same violation removed from
             # ironclad earlier; it was missed here. Now real content blocks.
-            + hb_about(t, pages) + hb_segments(t, pages) + hb_stats(t, pages)
+            + hb_stack(t, pages, faqs, pin=("about", "tips"),
+                       drop=("services", "steps"))
             + f'<section class="sec" style="padding-bottom:20px"><div class="wrap"><div class="sec__head"><span class="eyebrow">Good to know</span><h2>Little questions, answered</h2></div><div class="faqs">{faq}</div></div></section>'
             + f'<div class="ctawrap"><div class="cta"><h2>Let\'s get that door smiling again 🙂</h2><p>Book a warm, no-pressure visit with your {e(t["city"])} neighbors.</p><a class="btn" href="{chref}">📞 {clabel}</a></div></div>'
             + _nim_footer(t, pages) + "</body></html>")
@@ -1024,6 +1026,110 @@ def hb_areas(t, pages, eyebrow="Where we work"):
             f'<a class="hb-more" href="/service-areas/">All service areas</a></div></section>')
 
 
+# ---- blocks ported from the default design's expanded homepage ----
+# These sections existed only on the "garage" design, gated behind uses_expanded(), so
+# nine of ten sites rendered a much thinner page than the engine could already produce.
+# The copy and data (SYMPTOMS, DOOR_TYPES, REPAIR/REPLACE_SIGNS, MAINT_TIPS) stay in
+# build.py and are reached through H -- only the markup is new here, so the two designs
+# can never drift apart in wording.
+
+def hb_symptoms(t, pages, eyebrow="Start here"):
+    """Symptom chips -> the page that explains that symptom. Every chip resolves
+    against a page this site actually has."""
+    e = H.esc
+    chips = "".join(f'<a class="hb-sym" href="{H._first_url(pages, cands)}">{e(label)}</a>'
+                    for label, cands in H.SYMPTOMS)
+    return (f'<section class="hb hb--sym"><div class="hb-wrap">'
+            f'<p class="hb-eyebrow">{e(eyebrow)}</p><h2>What is your door doing?</h2>'
+            f'<p class="hb-lead">Pick the closest symptom and read what usually causes it '
+            f'- or get in touch and describe it.</p>'
+            f'<div class="hb-syms">{chips}</div></div></section>')
+
+
+def hb_repair_replace(t, eyebrow="Straight answer"):
+    e = H.esc
+    rep = "".join(f"<li>{e(s)}</li>" for s in H.REPAIR_SIGNS)
+    rpl = "".join(f"<li>{e(s)}</li>" for s in H.REPLACE_SIGNS)
+    return (f'<section class="hb hb--rvr"><div class="hb-wrap">'
+            f'<p class="hb-eyebrow">{e(eyebrow)}</p><h2>Repair it, or replace it?</h2>'
+            f'<p class="hb-lead">Nobody should be sold a whole new door for a broken spring. '
+            f'Here is how the call actually gets made.</p>'
+            f'<div class="hb-rvr">'
+            f'<div class="hb-rvr__c"><h3>Repair usually wins when</h3><ul>{rep}</ul></div>'
+            f'<div class="hb-rvr__c hb-rvr__c--alt"><h3>Replacement usually wins when</h3><ul>{rpl}</ul></div>'
+            f'</div></div></section>')
+
+
+def hb_doors(t, pages, eyebrow="Door styles"):
+    """Door-style grid. Uses the six GD INSTALLATION photos select_photos() reserved
+    for this block when the site has them."""
+    e = H.esc
+    imgs = t.get("door_imgs") or []
+    url = H._first_url(pages, ["/services/garage-door-installation/"], "/request-a-quote/")
+    cells = ""
+    for i, (name, blurb) in enumerate(H.DOOR_TYPES):
+        pic = (f'<span class="hb-door__img"><img src="{PHOTOS}{imgs[i % len(imgs)]}" '
+               f'alt="{e(name)} garage door" width="800" height="600" loading="lazy" '
+               f'decoding="async"></span>') if imgs else ""
+        cells += (f'<a class="hb-door" href="{url}">{pic}'
+                  f'<span class="hb-door__t"><h3>{e(name)}</h3><p>{e(blurb)}</p></span></a>')
+    return (f'<section class="hb hb--doors"><div class="hb-wrap">'
+            f'<p class="hb-eyebrow">{e(eyebrow)}</p><h2>Doors we install</h2>'
+            f'<div class="hb-doors">{cells}</div></div></section>')
+
+
+def hb_maintenance(t, eyebrow="Keep it running"):
+    e = H.esc
+    cells = "".join(f'<div class="hb-tip"><h3>{e(title)}</h3><p>{e(body)}</p></div>'
+                    for _ic, title, body in H.MAINT_TIPS)
+    return (f'<section class="hb hb--tips"><div class="hb-wrap">'
+            f'<p class="hb-eyebrow">{e(eyebrow)}</p><h2>Four things that keep a door alive</h2>'
+            f'<div class="hb-tips">{cells}</div></div></section>')
+
+
+def hb_safety(t, eyebrow="Please read"):
+    e = H.esc
+    return (f'<section class="hb hb--safety"><div class="hb-wrap"><div class="hb-safety">'
+            f'<p class="hb-eyebrow">{e(eyebrow)}</p>'
+            f'<h2>The one job we ask you not to do yourself</h2>'
+            f'<p>A torsion spring stores enough energy to lift a door that weighs about as '
+            f'much as you do, and it lets go of all of it the moment a winding bar slips. '
+            f'Spring replacement is the most common source of serious injury in this trade, '
+            f'and it is the one repair we tell every homeowner in {e(t["city"])} to hand over.</p>'
+            f'<p>Plenty of the rest is fair game for a confident DIYer. This one is not.</p>'
+            f'</div></div></section>')
+
+
+def hb_emergency(t):
+    e = H.esc
+    ask = "call" if H.has_phone(t) else "send it through"
+    cta = _tel(t, label=f'Call {e(t["phone"])}', cls="hb-emerg__btn") or \
+        '<a class="hb-emerg__btn" href="/request-a-quote/">Request urgent service</a>'
+    return (f'<section class="hb hb--emerg"><div class="hb-wrap"><div class="hb-emerg">'
+            f'<div><b>Door stuck open, or a spring already gone?</b>'
+            f'<span>Neither one waits for an appointment window - {ask} and we will move '
+            f'the job up the list.</span></div>{cta}</div></div></section>')
+
+
+def hb_local(t, pages, eyebrow="Local knowledge"):
+    """Renders the city's own copy from the home JSON. Returns "" when that city has no
+    such section, so it never prints a generic paragraph in its place."""
+    e = H.esc
+    home = pages.get("/")
+    body = ""
+    for sec in (home or {}).get("sections", []):
+        h2 = (sec.get("h2") or "").lower()
+        if any(k in h2 for k in ("local", "why_local", "area", "climate", "weather")):
+            body = sec.get("body", "")
+            break
+    if not body:
+        return ""
+    return (f'<section class="hb hb--local"><div class="hb-wrap">'
+            f'<p class="hb-eyebrow">{e(eyebrow)}</p>'
+            f'<h2>Doors in {e(t["city"])}, specifically</h2>'
+            f'<div class="hb-prose">{H.render_body(body)}</div></div></section>')
+
+
 def hb_announce(t):
     """Thin bar above the header. Renders only when `announce` is configured for the
     site (or in defaults) -- an empty promo bar is worse than none, and inventing a
@@ -1155,6 +1261,61 @@ def hb_photo(t, i, alt=None, cls=""):
             f'loading="lazy" decoding="async">')
 
 
+# ---------------------------------------------------------------- homepage composition
+# At ~1000 sites across ten designs, roughly a hundred sites share each design. If they
+# also share a section order, they are the same page in different colours. So the middle
+# of the homepage is ordered per domain: deterministic (a domain always builds the same
+# site, so diffs stay reviewable and nothing churns between builds) but different from
+# its neighbours.
+#
+# Anchors are fixed on purpose rather than shuffled: services stays near the top because
+# it is what the visitor came for, and areas -> FAQ -> CTA close every page because that
+# is the conversion path. Only the explanatory middle moves.
+
+def _domain_order(items, seed):
+    """Stable per-domain ordering. Same domain + same block set -> same order forever."""
+    import hashlib
+    keyed = [(hashlib.md5(f"{seed}|{name}".encode()).hexdigest(), name, fn)
+             for name, fn in items]
+    return [(name, fn) for _, name, fn in sorted(keyed)]
+
+
+def hb_stack(t, pages, faqs, pin=(), drop=()):
+    """The homepage body for a block-composed design.
+
+    `pin` lets a design fix a few blocks at the top -- that is part of its identity
+    (atlas leads with its at-a-glance stats, hearth with a warm intro). Everything else
+    is ordered by domain. `drop` removes blocks a design renders in its own markup, so
+    nothing appears twice.
+    """
+    blocks = {
+        "about":    lambda: hb_about(t, pages),
+        "stats":    lambda: hb_stats(t, pages),
+        "symptoms": lambda: hb_symptoms(t, pages),
+        "signals":  lambda: hb_signals(t),
+        "steps":    lambda: hb_steps(t),
+        "rvr":      lambda: hb_repair_replace(t),
+        "doors":    lambda: hb_doors(t, pages),
+        "tips":     lambda: hb_maintenance(t),
+        "safety":   lambda: hb_safety(t),
+        "emergency": lambda: hb_emergency(t),
+        "local":    lambda: hb_local(t, pages),
+        "segments": lambda: hb_segments(t, pages),
+        "guides":   lambda: hb_guides(t, pages),
+    }
+    for name in drop:
+        blocks.pop(name, None)
+    pinned = [(n, blocks.pop(n)) for n in pin if n in blocks]
+    middle = _domain_order(list(blocks.items()), t.get("domain", ""))
+    # ironclad and nimbus render their own services rows, so they drop this anchor
+    # rather than printing the same list twice
+    out = [] if "services" in drop else [hb_services(t, pages)]
+    out += [fn() for _, fn in pinned]
+    out += [fn() for _, fn in middle]
+    out += [hb_areas(t, pages), hb_faq(faqs), hb_cta(t)]
+    return "".join(out)
+
+
 # Structural CSS for the blocks above. Designs restyle freely; this only guarantees
 # the sections lay out sanely before any theming is applied.
 BLOCK_CSS = """
@@ -1215,6 +1376,42 @@ BLOCK_CSS = """
 .hb-cta__acts{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
 .hb-cta__btn{display:inline-block;padding:15px 30px;text-decoration:none;font-weight:700}
 .hb-photo{width:100%;height:auto;display:block}
+/* ported expanded-homepage blocks */
+.hb-syms{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.hb-sym{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;
+  text-decoration:none;color:inherit;font-weight:600}
+.hb-sym::after{content:"92";opacity:.6}
+.hb-rvr{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.hb-rvr__c{padding:28px}
+.hb-rvr__c h3{margin:0 0 14px;font-size:1.1rem}
+.hb-rvr__c ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:9px}
+.hb-rvr__c li{opacity:.85}
+.hb-doors{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.hb-door{display:flex;flex-direction:column;text-decoration:none;color:inherit;overflow:hidden}
+.hb-door__img{display:block;overflow:hidden}
+.hb-door__img img{width:100%;height:170px;object-fit:cover;display:block;transition:transform .45s ease}
+.hb-door:hover .hb-door__img img{transform:scale(1.06)}
+.hb-door__t{display:block;padding:22px}
+.hb-door h3{margin:0 0 7px;font-size:1.05rem}.hb-door p{margin:0;opacity:.8;font-size:.92rem}
+.hb-tips{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.hb-tip{padding:24px}
+.hb-tip h3{margin:0 0 8px;font-size:1.02rem}.hb-tip p{margin:0;opacity:.8;font-size:.93rem}
+.hb-safety{max-width:70ch;display:flex;flex-direction:column;gap:12px}
+.hb--emerg{padding:0}
+.hb-emerg{display:flex;align-items:center;justify-content:space-between;gap:22px;
+  flex-wrap:wrap;padding:26px 0}
+.hb-emerg b{display:block;font-size:1.1rem;margin-bottom:4px}
+.hb-emerg span{opacity:.85}
+.hb-emerg__btn{display:inline-block;padding:13px 26px;text-decoration:none;font-weight:700;white-space:nowrap}
+@media(max-width:980px){
+  .hb-syms{grid-template-columns:1fr 1fr}
+  .hb-rvr,.hb-doors,.hb-tips{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .hb-syms{grid-template-columns:1fr}
+  .hb-emerg{flex-direction:column;align-items:flex-start}
+}
+
 @media(max-width:980px){
   .hb-svcs,.hb-steps,.hb-guides,.hb-segs{grid-template-columns:1fr}
   .hb-sigs,.hb-areas,.hb-statrow{grid-template-columns:1fr 1fr}
@@ -1379,9 +1576,7 @@ def forge_home(t, pages):
               f'<div class="fg-acts">{call}<a class="fg-btn fg-btn--ghost" href="/services/">See what we fix</a></div>'
               f'</div></section>'
             + f'<div class="fg-rail">{rail}</div>'
-            + hb_stats(t, pages) + hb_about(t, pages)
-            + hb_services(t, pages) + hb_segments(t, pages) + hb_steps(t) + hb_signals(t)
-            + hb_areas(t, pages) + hb_guides(t, pages) + hb_faq(faqs) + hb_cta(t)
+            + hb_stack(t, pages, faqs, pin=("stats", "emergency"))
             + _chrome_footer(t, pages) + "</body></html>")
 
 
@@ -1468,9 +1663,7 @@ def coast_home(t, pages):
             + f'<div class="cs-strip"><div><span><b>Same-day</b> on most repairs</span>'
               f'<span><b>Written</b> prices, not ranges</span>'
               f'<span><b>Springs, openers, panels</b> and full replacements</span></div></div>'
-            + hb_about(t, pages) + hb_services(t, pages) + hb_signals(t)
-            + hb_guides(t, pages) + hb_segments(t, pages) + hb_steps(t)
-            + hb_stats(t, pages) + hb_areas(t, pages) + hb_faq(faqs) + hb_cta(t)
+            + hb_stack(t, pages, faqs, pin=("about", "guides"))
             + _chrome_footer(t, pages) + "</body></html>")
 
 
@@ -1553,9 +1746,7 @@ def beacon_home(t, pages):
               f'<a class="bc-btn bc-btn--alt" href="/request-a-quote/">Get a free quote</a></div></div></section>'
             + f'<div class="bc-band"><div><span>Same-day on most repairs</span>'
               f'<span>Written prices</span><span>Springs · Openers · Panels · New doors</span></div></div>'
-            + hb_stats(t, pages) + hb_services(t, pages) + hb_segments(t, pages)
-            + hb_steps(t) + hb_about(t, pages) + hb_signals(t)
-            + hb_guides(t, pages) + hb_areas(t, pages) + hb_faq(faqs) + hb_cta(t, cta="Get a free quote")
+            + hb_stack(t, pages, faqs, pin=("symptoms", "stats"))
             + _chrome_footer(t, pages) + "</body></html>")
 
 
@@ -1643,9 +1834,7 @@ def atlas_home(t, pages):
               f'<p>{e(lead)}</p><div class="at-acts">{call}'
               f'<a class="at-btn at-btn--alt" href="/services/">Browse services</a></div></div>'
               f'<div class="at-spec"><h2>At a glance</h2><dl>{spec}</dl></div></div></section>'
-            + hb_stats(t, pages) + hb_about(t, pages) + hb_services(t, pages)
-            + hb_segments(t, pages) + hb_signals(t) + hb_steps(t)
-            + hb_areas(t, pages) + hb_guides(t, pages) + hb_faq(faqs) + hb_cta(t)
+            + hb_stack(t, pages, faqs, pin=("stats", "rvr"))
             + _chrome_footer(t, pages) + "</body></html>")
 
 
@@ -1730,9 +1919,7 @@ def hearth_home(t, pages):
               f'<a class="ht-btn ht-btn--alt" href="/request-a-quote/">Book a visit</a></div></div>'
               f'<div class="ht-card__img"><img src="{PHOTOS}{_hero(t)}" alt="{e(t["city"])} garage door" '
               f'width="1200" height="900" fetchpriority="high" decoding="async"></div></div></section>'
-            + hb_about(t, pages) + hb_signals(t) + hb_services(t, pages)
-            + hb_segments(t, pages) + hb_steps(t) + hb_guides(t, pages)
-            + hb_stats(t, pages) + hb_areas(t, pages) + hb_faq(faqs) + hb_cta(t, cta="Book a visit")
+            + hb_stack(t, pages, faqs, pin=("about", "tips"))
             + _chrome_footer(t, pages) + "</body></html>")
 
 
@@ -1821,9 +2008,7 @@ def quarry_home(t, pages):
               f'<div class="qy-slab"><img src="{PHOTOS}{_hero(t)}" alt="{e(t["city"])} garage door" '
               f'width="1600" height="900" fetchpriority="high" decoding="async"></div>'
               f'<div class="qy-meta">{meta}</div></section>'
-            + hb_stats(t, pages) + hb_services(t, pages) + hb_segments(t, pages)
-            + hb_steps(t) + hb_about(t, pages) + hb_guides(t, pages)
-            + hb_signals(t) + hb_areas(t, pages) + hb_faq(faqs) + hb_cta(t, cta="Get a quote")
+            + hb_stack(t, pages, faqs, pin=("symptoms", "safety"))
             + _chrome_footer(t, pages) + "</body></html>")
 
 
@@ -1909,9 +2094,7 @@ def verdant_home(t, pages):
             + f'<div class="vd-band"><img src="{PHOTOS}{_hero(t)}" alt="{e(t["city"])} garage door" '
               f'width="1600" height="900" fetchpriority="high" decoding="async"></div>'
             + f'<div class="vd-pills">{pills}</div>'
-            + hb_stats(t, pages) + hb_services(t, pages) + hb_segments(t, pages)
-            + hb_about(t, pages) + hb_steps(t) + hb_signals(t)
-            + hb_areas(t, pages) + hb_guides(t, pages) + hb_faq(faqs) + hb_cta(t)
+            + hb_stack(t, pages, faqs, pin=("doors", "stats"))
             + _chrome_footer(t, pages) + "</body></html>")
 
 
