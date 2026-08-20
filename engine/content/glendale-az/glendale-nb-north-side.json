@@ -1,0 +1,20 @@
+{
+ "title": "Garage Door Service in North Side - Glendale, AZ",
+ "meta": "Garage door repair and installation in North Side, Glendale. Same-day service, local techs.",
+ "h1": "Garage Door Service in North Side",
+ "sections": [
+  {
+   "h2": "serving_the_neighborhood",
+   "body": "We cover North Side and the rest of Glendale for garage door repair, spring and opener service, and new-door installation. Same-day service on most repairs, with a written price before we start."
+  }
+ ],
+ "faq": [
+  {
+   "q": "Do you serve North Side?",
+   "a": "Yes - North Side is inside our regular Glendale service area."
+  }
+ ],
+ "schema_facts": {
+  "areaServed": "North Side, Glendale, AZ"
+ }
+}

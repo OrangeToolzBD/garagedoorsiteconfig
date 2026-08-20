@@ -580,7 +580,10 @@ def load_config():
             "form_action": s.get("form_action", ""),
             "port": s.get("port"),
             # design template ("garage" default; ironclad/nimbus are full alt designs)
-            "template": s.get("template", "garage"),
+            # deliberately NOT defaulted to "garage": site_design() derives one from
+            # the domain when this is blank, so sites registered without a template
+            # spread across all ten designs instead of stacking on the default
+            "template": s.get("template", ""),
             # homepage stack: "expanded" (default, 17 sections) | "classic" (the original
             # 8) | "showcase" -- plus the optional, business-supplied trust data below
             "home": s.get("home", "expanded"),
@@ -763,6 +766,25 @@ DROPPABLE = ["segments", "tips", "safety", "emergency", "rvr", "doors", "symptom
 
 def _pick(seed, key, options):
     return options[int(hashlib.md5(f"{seed}|{key}".encode()).hexdigest(), 16) % len(options)]
+
+
+# The ten designs, in the order engine.py's bulk assigns them.
+DESIGN_NAMES = ["garage", "ironclad", "nimbus", "forge", "coastline",
+                "beacon", "atlas", "hearth", "quarry", "verdant"]
+
+
+def site_design(t):
+    """Which design this site renders with.
+
+    An explicit "template" in sites.json always wins. Without one the design is DERIVED
+    from the domain rather than falling back to "garage" -- because 992 of the 1001
+    registered sites have no template, and returning the default for all of them meant
+    every site a teammate generated came out on the same design. The recipe varied nav,
+    cards, spacing and type inside that one design, which is real variation but reads as
+    "almost the same site". Deriving it spreads them across all ten.
+    """
+    name = (t.get("template") or "").strip()
+    return name if name else _pick(t.get("domain", ""), "design", DESIGN_NAMES)
 
 
 def recipe(t):
@@ -1918,7 +1940,7 @@ GARAGE = {"css": lambda t: css(t) + GD_CSS + QFORM_CSS + actionbar_css(t) + fx_c
           "trust": lambda t, pages, url, h1, blocks, q=False: trust_page(t, pages, url, h1, blocks, q)}
 
 def get_renderer(t):
-    name = t.get("template", "garage")
+    name = site_design(t)
     if name and name != "garage":
         import sys, templates
         templates.H = sys.modules[__name__]          # give templates access to shared helpers
