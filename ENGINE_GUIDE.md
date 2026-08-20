@@ -762,6 +762,39 @@ now aliases `.wrap` to the same box as `.pg-wrap`. Measured after the fix: the f
 container starts at the same x as the page container (1180px, both at x=43 on a 1280px
 viewport) and keeps a 28px gutter at 375px.
 
+### Page FX: reveal on scroll, smooth scrolling, back to top
+
+All three live in one shared module in `build.py` (`fx_css` / `FX_JS` / `FX_HEAD`,
+`TOTOP_HTML`) and are injected by `write()`, the same way the action bar is. The
+scroll-reveal previously sat inside the default design's `nav.js`, which meant the
+nine alt designs had no entrance animation at all and no smooth scrolling; that copy
+has been removed, so there is exactly one implementation.
+
+- **Reveal.** An IntersectionObserver adds `.in` to elements tagged `.fx-r`, staggered
+  up to 6 deep inside grids and lists. The selector list covers the default design's
+  markup, the shared section blocks and page skeleton, and ironclad/nimbus's own
+  sections.
+- **Smooth scrolling** with `scroll-padding-top: 96px`, so an anchor target is never
+  hidden behind the sticky header.
+- **Back to top** appears past 600px, uses the site's brand colour, and sits above the
+  mobile action bar via `body:has(.abar) .totop`. Clicking it also moves focus to the
+  skip link -- scrolling a keyboard user to the top while leaving focus mid-page is a
+  well-known trap.
+
+Three properties that matter more than the effect itself:
+
+1. `prefers-reduced-motion: reduce` disables **both** the reveal and the smooth scroll.
+2. Content is only ever hidden when JS is actually running. The reveal styles are gated
+   on `html.anim`, set by an inline `<head>` script, so with JS off or broken nothing is
+   stuck at `opacity: 0`.
+3. A 2.6s timeout calls `showAll()` regardless, so a failed observer cannot leave a page
+   blank.
+
+Verified across 202 pages: every page has the gate, exactly one back-to-top button and
+one reveal pass, and zero elements left hidden. In-browser: the button appears on
+scroll, is hit-testable, calls `scrollTo({top:0, behavior:'smooth'})`, hides again at
+the top, and clears the mobile bar by 15px at 375px.
+
 ### Verified
 
 Rebuilt and checked in-browser at 375 px and 1280 px. Across 202 pages: **0 broken

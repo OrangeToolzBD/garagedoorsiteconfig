@@ -36,23 +36,37 @@ DEFAULT = ["dallasdoorpros.com", "austingaragedoorguys.com",
            "pickeringtongaragedoorpros.com", "richmonddoorpros.com",
            "auroragaragedoorpros.com"]
 
-# href="/x" / src="/x" -> href="/<prefix>/x". The negative lookahead keeps it from
-# double-prefixing on a re-run, and `https://` never starts with `/` so it is untouched.
-def _rewrite(html, prefix):
+# href="/x" / src="/x" -> the same file under <prefix>/. `https://...` never starts
+# with "/" so absolute URLs are untouched.
+#
+# depth is how far this HTML file sits below the bundle root. With it we emit
+# "../../<prefix>/x" instead of "/<prefix>/x", which makes the bundle base-independent:
+# it works served from a domain root AND from a subpath like
+# https://user.github.io/repo/. Root-relative links would 404 in the second case,
+# because "/assets/..." resolves to the domain root, not the repo folder.
+def _rewrite(html, prefix, depth=None):
+    up = "" if depth is None else "../" * depth
     def sub(m):
         attr, url = m.group(1), m.group(2)
-        if url.startswith(f"/{prefix}/") or url == f"/{prefix}":
-            return m.group(0)
-        return f'{attr}="/{prefix}{url}"'
+        if depth is None:
+            if url.startswith(f"/{prefix}/") or url == f"/{prefix}":
+                return m.group(0)
+            return f'{attr}="/{prefix}{url}"'
+        return f'{attr}="{up}{prefix}{url}"'
     return re.sub(r'\b(href|src)="(/[^"]*)"', sub, html)
 
 
-def bundle(domains):
+def bundle(domains, out=None, relative=False):
+    """Copy each built site under out/<slug>/ and repoint its URLs.
+
+    relative=True emits base-independent links, so the bundle also works when served
+    from a subpath (GitHub Pages project sites live at /<repo>/)."""
+    out = out or OUT
     cfg = json.load(open(os.path.join(ROOT, "config", "sites.json"), encoding="utf-8"))
     sites = {s["domain"]: s for s in cfg["sites"]}
-    if os.path.isdir(OUT):
-        shutil.rmtree(OUT)
-    os.makedirs(OUT)
+    if os.path.isdir(out):
+        shutil.rmtree(out)
+    os.makedirs(out)
 
     made = []
     for domain in domains:
@@ -61,7 +75,7 @@ def bundle(domains):
             print(f"  skip {domain}: not built (run build.py first)")
             continue
         slug = domain.rsplit(".", 1)[0]
-        dst = os.path.join(OUT, slug)
+        dst = os.path.join(out, slug)
         shutil.copytree(src, dst)
         n = 0
         for dp, _, files in os.walk(dst):
@@ -70,28 +84,32 @@ def bundle(domains):
                     continue
                 p = os.path.join(dp, fn)
                 html = open(p, encoding="utf-8").read()
-                open(p, "w", encoding="utf-8").write(_rewrite(html, slug))
+                depth = (os.path.relpath(dp, out).replace("\\", "/").count("/") + 1) if relative else None
+                open(p, "w", encoding="utf-8").write(_rewrite(html, slug, depth))
                 n += 1
         s = sites.get(domain, {})
         made.append({"domain": domain, "slug": slug, "pages": n,
+                     "has_logo": os.path.exists(os.path.join(dst, "assets", "logo-emblem.png")),
                      "brand": s.get("brand", domain), "city": s.get("city", ""),
                      "st": s.get("st", ""), "design": s.get("template", "garage"),
                      "p": s.get("p", "#12213a")})
-        print(f"  {domain} -> preview/{slug}/  ({n} pages rewritten)")
-    open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(landing(made))
-    print(f"\nBundled {len(made)} sites -> {OUT}")
+        print(f"  {domain} -> {os.path.basename(out)}/{slug}/  ({n} pages rewritten)")
+    open(os.path.join(out, "index.html"), "w", encoding="utf-8").write(landing(made, relative))
+    print(f"\nBundled {len(made)} sites -> {out}")
     return made
 
 
-def landing(sites):
+def landing(sites, relative=False):
+    # the landing page sits at the bundle root, so relative links need no "../"
+    b = "" if relative else "/"
     cards = ""
     for s in sites:
-        logo = os.path.exists(os.path.join(OUT, s["slug"], "assets", "logo-emblem.png"))
-        mark = (f'<img class="c__logo" src="/{s["slug"]}/assets/logo-emblem.png" alt="">'
+        logo = s.get("has_logo")
+        mark = (f'<img class="c__logo" src="{b}{s["slug"]}/assets/logo-emblem.png" alt="">'
                 if logo else '<span class="c__logo c__logo--none">no logo in set</span>')
         cards += f"""
-    <a class="c" href="/{s['slug']}/">
-      <span class="c__shot"><img src="/{s['slug']}/assets/photos/hero.webp" alt="" loading="lazy"></span>
+    <a class="c" href="{b}{s['slug']}/">
+      <span class="c__shot"><img src="{b}{s['slug']}/assets/photos/hero.webp" alt="" loading="lazy"></span>
       <span class="c__body">
         <span class="c__head">{mark}<span class="c__design">{s['design']}</span></span>
         <strong class="c__name">{s['brand']}</strong>
@@ -145,4 +163,7 @@ Each site's canonical tags still point at its real production domain.</p>
 
 
 if __name__ == "__main__":
-    bundle(sys.argv[1:] or DEFAULT)
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    rel = "--relative" in sys.argv
+    out = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--out=")), None)
+    bundle(args or DEFAULT, out=out, relative=rel)

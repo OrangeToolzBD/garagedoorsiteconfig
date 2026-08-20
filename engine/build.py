@@ -1398,6 +1398,111 @@ def index_page(t, pages, cat, url, title_h1, eyebrow, blurb):
     return (head_html(t, seo_title(f"{title_h1} | {t['brand']}"), blurb, url, schemas, og_image=t.get("hero_img") or HERO_IMG)
             + header(t, pages) + body + footer(t, pages) + "</body></html>")
 
+# ---------------------------------------------------------------- page FX
+# Smooth scrolling, scroll-reveal on content, and a back-to-top button. Shared by all
+# ten designs and injected by write(), for the same reason the action bar is: the
+# scroll-reveal previously lived in the default design's nav.js, so the nine alt
+# designs silently had no entrance animation at all.
+#
+# Three things this must not get wrong:
+#   1. prefers-reduced-motion is honoured for BOTH the reveal and the smooth scroll.
+#      Motion sensitivity is the whole reason that media query exists.
+#   2. Content is never hidden unless JS is actually running. The reveal styles are
+#      gated on `html.anim`, a class set by an inline <head> script, so with JS off or
+#      broken nothing is ever stuck at opacity:0.
+#   3. There is a timeout fallback, so a failed IntersectionObserver cannot leave a
+#      page blank.
+
+def fx_css(t):
+    """Per-site so the back-to-top button picks up the site's brand colour."""
+    return ("""
+html{scroll-behavior:smooth;scroll-padding-top:96px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media (prefers-reduced-motion:no-preference){
+  html.anim .fx-r{opacity:0;transform:translateY(22px);
+    transition:opacity .6s ease,transform .7s cubic-bezier(.2,.75,.25,1)}
+  html.anim .fx-r.in{opacity:1;transform:none}
+}
+.totop{position:fixed;right:18px;bottom:18px;z-index:92;width:46px;height:46px;
+  border:0;border-radius:50%;cursor:pointer;display:grid;place-items:center;
+  background:__P__;color:#fff;box-shadow:0 6px 20px rgba(15,23,42,.30);
+  opacity:0;visibility:hidden;transform:translateY(10px);
+  transition:opacity .25s,transform .25s,visibility .25s}
+.totop.show{opacity:1;visibility:visible;transform:none}
+.totop:hover{background:__PD__}
+.totop svg{width:20px;height:20px;display:block}
+/* clear the mobile action bar when the page has one */
+@media(max-width:__BP__px){
+  .totop{right:14px;bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+  body:has(.abar) .totop{bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+}
+"""
+            .replace("__BP__", str(ACTIONBAR_BP))
+            .replace("__PD__", t.get("pd", "#0b1626"))
+            .replace("__P__", t.get("p", "#12213a")))
+
+
+TOTOP_HTML = ('<button class="totop" type="button" aria-label="Back to top">'
+              '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">'
+              '<path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.2" '
+              'stroke-linecap="round" stroke-linejoin="round"/></svg></button>')
+
+FX_JS = """<script>(function(){
+ var root=document.documentElement;
+ var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+ // ---- back to top
+ var btn=document.querySelector('.totop');
+ if(btn){
+   var onScroll=function(){
+     if((window.pageYOffset||root.scrollTop)>600)btn.classList.add('show');
+     else btn.classList.remove('show');
+   };
+   window.addEventListener('scroll',onScroll,{passive:true});onScroll();
+   btn.addEventListener('click',function(){
+     window.scrollTo({top:0,behavior:reduce?'auto':'smooth'});
+     // move focus to the top of the document, or a keyboard user is left mid-page
+     var skip=document.querySelector('.skip');if(skip)skip.focus({preventScroll:true});
+   });
+ }
+
+ // ---- scroll reveal
+ if(!root.classList.contains('anim')||reduce) return;
+ var sel=[
+   // default "garage" design
+   '.sec-head','.scard','.feat','.step','.pricewrap','.areas a','.cta-band','.faq details',
+   '.article .body>h2','.article .body>h3','.article .body>p','.article .body>ul',
+   '.article .body>ol','.article .body>.tw','.article .body>.faq','.article .body>img','.aside',
+   // shared section blocks + page skeleton used by the alt designs
+   '.hb-wrap>h2','.hb-svc','.hb-step','.hb-sig','.hb-guide','.hb-faq','.hb-areas a',
+   '.hb--cta .hb-wrap','.pg-body>h2','.pg-body>h3','.pg-body>p','.pg-body>ul','.pg-body>ol',
+   '.pg-body>img','.pg-body>details','.pg-aside','.pg-row',
+   // ironclad / nimbus keep their own section markup
+   '.svc__row','.tile','.tl','.q','.bubble'
+ ].join(',');
+ var els=[].slice.call(document.querySelectorAll(sel));
+ if(!els.length) return;
+ els.forEach(function(el){el.classList.add('fx-r')});
+ // stagger within a grid or list so rows arrive in sequence, not all at once
+ [].forEach.call(document.querySelectorAll(
+     '.grid,.steps,.areas,.faq,.hb-svcs,.hb-steps,.hb-sigs,.hb-guides,.hb-areas,.hb-faqs,.tiles'),
+   function(g){var i=0;[].forEach.call(g.children,function(c){
+     if(c.classList.contains('fx-r')){c.style.transitionDelay=(Math.min(i,6)*80)+'ms';i++;}});});
+ function showAll(){els.forEach(function(el){el.classList.add('in')});}
+ if(!('IntersectionObserver' in window)){showAll();return;}
+ var io=new IntersectionObserver(function(ents){
+   ents.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});
+ },{threshold:0.08,rootMargin:'0px 0px -5% 0px'});
+ els.forEach(function(el){io.observe(el)});
+ // safety net: never leave content hidden if the observer never fires
+ setTimeout(showAll,2600);
+})();</script>"""
+
+# Sets the gate class before first paint, so revealed content never flashes visible
+# then hides. Only added when the design's own <head> has not done it already.
+FX_HEAD = "<script>document.documentElement.classList.add('anim')</script>"
+
+
 # ---------------------------------------------------------------- mobile action bar
 # A fixed call/quote bar under 1024px. Injected by write() for every page of every
 # design rather than added to each renderer, so no design can ship without it and none
@@ -1547,7 +1652,7 @@ def trust_page(t, pages, url, h1, blocks, is_quote=False):
 # ---------------------------------------------------------------- renderer dispatch
 # The default "garage" design is the module functions above. Alternate full designs
 # (ironclad / volt / nimbus) live in templates.py and expose the same interface.
-GARAGE = {"css": lambda t: css(t) + GD_CSS + QFORM_CSS + actionbar_css(t), "navjs": NAVJS,
+GARAGE = {"css": lambda t: css(t) + GD_CSS + QFORM_CSS + actionbar_css(t) + fx_css(t), "navjs": NAVJS,
           "home": lambda t, pages: home_page(t, pages),
           "inner": lambda t, p, pages: inner_page(t, p, pages),
           "index": lambda t, pages, cat, url, h1, eb, bl: index_page(t, pages, cat, url, h1, eb, bl),
@@ -1567,12 +1672,15 @@ def get_renderer(t):
 # ---------------------------------------------------------------- build
 def write(out, url, htmlstr, t=None):
     htmlstr = clean_text(htmlstr)  # sweep any hardcoded typographic chars from the assembled page
-    # The mobile action bar goes in here, not in the renderers: ten designs x five page
-    # types is fifty places to forget it, and every page ends with the same </body>.
+    # The mobile action bar and the page FX go in here, not in the renderers: ten
+    # designs x five page types is fifty places to forget them, and every page ends
+    # with the same </body>.
     if t is not None:
-        bar = action_bar(t, url)
-        if bar:
-            htmlstr = htmlstr.replace("</body>", bar + "</body>", 1)
+        # gate class must be set before first paint, or revealed content flashes
+        if "classList.add('anim')" not in htmlstr:
+            htmlstr = htmlstr.replace("</head>", FX_HEAD + "</head>", 1)
+        tail = action_bar(t, url) + TOTOP_HTML + FX_JS
+        htmlstr = htmlstr.replace("</body>", tail + "</body>", 1)
     path = os.path.join(out, url.strip("/"), "index.html") if url != "/" else os.path.join(out, "index.html")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     open(path, "w", encoding="utf-8").write(htmlstr)
