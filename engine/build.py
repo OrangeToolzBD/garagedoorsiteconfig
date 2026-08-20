@@ -12,7 +12,7 @@ Page types (by filename): <city>-home / -svc- / -nb- / -sub- / -top-.
   sub  -> /service-areas/<slug>/   (suburbs)
   top  -> /guides/<slug>/          (topic guides)
 """
-import os, re, json, html, shutil
+import os, re, json, html, shutil, hashlib
 from datetime import date
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -716,6 +716,177 @@ def call_cta(t, cls="btn btn--primary", label=None, quote_label="Get a Free Quot
     return f'<a class="{cls}" href="/request-a-quote/">{_svg_mail()}{esc(quote_label)}</a>'
 
 # ---------------------------------------------------------------- content loading
+# ---------------------------------------------------------------- variation recipe
+# At ~1000 sites there is no version of "pick a nice layout" that scales -- the look has
+# to be derived. Every axis below is chosen from a hash of the domain, so:
+#   * a domain always builds the same site (rebuilds are diffable, nothing churns),
+#   * neighbouring cities land on different combinations,
+#   * and nothing has to be stored, assigned by hand, or kept in sync by a teammate.
+#
+# The axes are intentionally *compositional*: each one emits a class onto <body> and the
+# shared stylesheet defines what that class means. A design supplies the visual language
+# (colour, type, its own hero and sections); the recipe varies the structure inside it.
+# Ten designs x these axes is a very large space, and every combination is one that the
+# CSS was written to handle -- which is the difference between variation and randomness.
+
+TYPE_PAIRS = [
+    ("Urbanist:wght@600;700;800", "Urbanist", "Open Sans:wght@400;500;600", "Open Sans"),
+    ("Sora:wght@600;700;800", "Sora", "Inter:wght@400;500;600", "Inter"),
+    ("Manrope:wght@600;700;800", "Manrope", "Inter:wght@400;500;600", "Inter"),
+    ("Outfit:wght@600;700;800", "Outfit", "Karla:wght@400;500;600", "Karla"),
+    ("Bricolage+Grotesque:wght@600;700;800", "Bricolage Grotesque", "Inter:wght@400;500;600", "Inter"),
+    ("Fraunces:opsz,wght@9..144,600;9..144,700", "Fraunces", "Karla:wght@400;500;600", "Karla"),
+    ("Bitter:wght@600;700", "Bitter", "Nunito Sans:wght@400;600;700", "Nunito Sans"),
+    ("Archivo:wght@600;700;800", "Archivo", "Inter:wght@400;500;600", "Inter"),
+    ("Space Grotesk:wght@600;700", "Space Grotesk", "Inter:wght@400;500;600", "Inter"),
+    ("Plus Jakarta Sans:wght@600;700;800", "Plus Jakarta Sans", "Inter:wght@400;500;600", "Inter"),
+]
+
+VARIANT_AXES = {
+    "nav":   ["left", "center", "split", "wide"],      # where the nav sits in the bar
+    "hero":  ["tall", "compact", "left", "center"],    # hero height and alignment
+    "btn":   ["pill", "round", "sharp", "wide"],       # button shape
+    "card":  ["raised", "flat", "outline", "edge"],    # card treatment
+    "foot":  ["cols", "stack", "center", "split"],     # footer layout
+    "space": ["tight", "normal", "airy"],              # vertical rhythm
+    "img":   ["square", "round", "soft"],              # image corners
+    "grid":  ["g2", "g3", "g4"],                       # cards per row
+    "cta":   ["end", "mid", "both"],                   # CTA placement
+    "reviews": ["quote", "card", "row"],               # review block layout (when data exists)
+}
+
+# Blocks a site may go without. The rest are load-bearing (services, areas, FAQ, CTA)
+# and are never dropped: cutting them would trade page variety for lost conversions and
+# thinner pages, which is the opposite of the point.
+DROPPABLE = ["segments", "tips", "safety", "emergency", "rvr", "doors", "symptoms", "signals"]
+
+
+def _pick(seed, key, options):
+    return options[int(hashlib.md5(f"{seed}|{key}".encode()).hexdigest(), 16) % len(options)]
+
+
+def recipe(t):
+    """The per-site variation recipe. Cached on `t` so every caller sees one answer."""
+    if t.get("_recipe"):
+        return t["_recipe"]
+    seed = t.get("domain", "")
+    r = {k: _pick(seed, k, opts) for k, opts in VARIANT_AXES.items()}
+    r["type"] = _pick(seed, "type", TYPE_PAIRS)
+    # drop 2 of the optional blocks, so section *selection* varies and not just order
+    order = sorted(DROPPABLE, key=lambda n: hashlib.md5(f"{seed}|drop|{n}".encode()).hexdigest())
+    r["drop"] = tuple(order[:2])
+    t["_recipe"] = r
+    return r
+
+
+def variant_classes(t):
+    """The <body> class list. A design reads these purely through CSS."""
+    r = recipe(t)
+    return " ".join(f"v-{k}-{r[k]}" for k in VARIANT_AXES)
+
+
+def type_css(t):
+    """Per-site typography. Appended after the design's own stylesheet so it wins, and
+    applied through variables rather than by rewriting each design's font rules."""
+    _, disp, _, body = recipe(t)["type"]
+    return (f":root{{--v-disp:'{disp}';--v-body:'{body}'}}\n"
+            "body{font-family:var(--v-body),system-ui,sans-serif}\n"
+            "h1,h2,h3,h4,.hb-eyebrow,.tc-brand__txt{font-family:var(--v-disp),system-ui,sans-serif}\n")
+
+
+def type_fonts(t):
+    """The Google Fonts query for this site's pairing."""
+    d, _, b, _ = recipe(t)["type"]
+    return f"family={d}&family={b}"
+
+
+# Structure only: each token adjusts layout, never colour, so it composes with any
+# design's palette.
+VARIANT_CSS = """
+/* ---- nav placement ---- */
+.v-nav-center .tc-nav{margin:0 auto}
+.v-nav-center .tc-inner{justify-content:space-between}
+.v-nav-split .tc-nav{margin-left:auto;margin-right:auto}
+.v-nav-split .tc-acts{margin-left:0}
+.v-nav-wide .tc-inner{max-width:none;padding-left:40px;padding-right:40px}
+.v-nav-wide .tc-nav{gap:14px}
+/* ---- hero rhythm ---- */
+.v-hero-tall .fg-hero,.v-hero-tall .qy-slab img{min-height:84vh}
+.v-hero-tall .cs-hero,.v-hero-tall .at-in,.v-hero-tall .vd-hero,.v-hero-tall .ht-hero{padding-top:92px;padding-bottom:64px}
+.v-hero-compact .fg-hero{min-height:58vh}
+.v-hero-compact .cs-hero,.v-hero-compact .at-in,.v-hero-compact .vd-hero,.v-hero-compact .ht-hero{padding-top:44px;padding-bottom:26px}
+.v-hero-compact .bc-hero,.v-hero-compact .qy-hero{padding-top:52px;padding-bottom:44px}
+.v-hero-center .vd-hero,.v-hero-center .bc-in,.v-hero-center .qy-hero{text-align:center;margin-left:auto;margin-right:auto}
+.v-hero-center .bc-acts,.v-hero-center .qy-acts{justify-content:center}
+.v-hero-left .vd-hero{text-align:left;margin-left:0}
+.v-hero-left .vd-acts{justify-content:flex-start}
+/* ---- buttons ---- */
+.v-btn-pill .tc-cta,.v-btn-pill .hb-cta__btn,.v-btn-pill .pg-btn,.v-btn-pill .hb-emerg__btn,
+.v-btn-pill .abar__btn{border-radius:999px}
+.v-btn-round .tc-cta,.v-btn-round .hb-cta__btn,.v-btn-round .pg-btn,.v-btn-round .hb-emerg__btn,
+.v-btn-round .abar__btn{border-radius:12px}
+.v-btn-sharp .tc-cta,.v-btn-sharp .hb-cta__btn,.v-btn-sharp .pg-btn,.v-btn-sharp .hb-emerg__btn,
+.v-btn-sharp .abar__btn{border-radius:0}
+.v-btn-wide .tc-cta,.v-btn-wide .hb-cta__btn,.v-btn-wide .pg-btn,.v-btn-wide .hb-emerg__btn{
+  border-radius:8px;padding-left:34px;padding-right:34px;letter-spacing:.02em}
+/* ---- cards ---- */
+.v-card-raised .hb-svc,.v-card-raised .hb-guide,.v-card-raised .hb-sig,.v-card-raised .hb-door,
+.v-card-raised .hb-tip,.v-card-raised .hb-seg{box-shadow:0 10px 30px rgba(15,23,42,.10);border-radius:16px;overflow:hidden}
+.v-card-flat .hb-svc,.v-card-flat .hb-guide,.v-card-flat .hb-sig,.v-card-flat .hb-door,
+.v-card-flat .hb-tip,.v-card-flat .hb-seg{box-shadow:none;border-radius:0}
+.v-card-outline .hb-svc,.v-card-outline .hb-guide,.v-card-outline .hb-sig,.v-card-outline .hb-door,
+.v-card-outline .hb-tip,.v-card-outline .hb-seg{box-shadow:none;border:1px solid currentColor;border-color:color-mix(in srgb,currentColor 18%,transparent);border-radius:10px}
+.v-card-edge .hb-svc,.v-card-edge .hb-guide,.v-card-edge .hb-door,.v-card-edge .hb-tip{
+  box-shadow:none;border-radius:0;border-left:3px solid var(--accent,currentColor)}
+/* ---- images ---- */
+.v-img-round .hb-svc__img img,.v-img-round .hb-guide__img img,.v-img-round .hb-door__img img,
+.v-img-round .pg-body img{border-radius:18px}
+.v-img-soft .hb-svc__img img,.v-img-soft .hb-guide__img img,.v-img-soft .hb-door__img img,
+.v-img-soft .pg-body img{border-radius:8px}
+.v-img-square .hb-svc__img img,.v-img-square .hb-guide__img img,.v-img-square .hb-door__img img,
+.v-img-square .pg-body img{border-radius:0}
+/* ---- grid density ---- */
+.v-grid-g2 .hb-svcs,.v-grid-g2 .hb-guides,.v-grid-g2 .hb-doors{grid-template-columns:repeat(2,1fr)}
+.v-grid-g4 .hb-svcs,.v-grid-g4 .hb-guides,.v-grid-g4 .hb-doors{grid-template-columns:repeat(4,1fr)}
+.v-grid-g2 .hb-sigs,.v-grid-g2 .hb-tips{grid-template-columns:repeat(2,1fr)}
+/* ---- vertical rhythm ---- */
+.v-space-tight .hb{padding-top:52px;padding-bottom:52px}
+.v-space-airy .hb{padding-top:104px;padding-bottom:104px}
+.v-space-airy .hb h2{margin-bottom:44px}
+/* ---- footer ---- */
+.v-foot-stack .tc-fcols{grid-template-columns:1fr 1fr}
+.v-foot-center .tc-fcols{grid-template-columns:1fr;text-align:center;justify-items:center}
+.v-foot-center .tc-fbrand p,.v-foot-center .tc-fbrand address{margin-left:auto;margin-right:auto}
+.v-foot-center .tc-flegal{justify-content:center;text-align:center}
+.v-foot-split .tc-fcols{grid-template-columns:1.4fr 1fr 1fr}
+.v-foot-split .tc-fcol:nth-child(n+4){display:none}
+/* ---- reviews (only rendered when a site has real review data) ---- */
+.hb-revs{display:grid;gap:20px}
+.hb-rev{margin:0;padding:26px}
+.hb-rev blockquote{margin:0 0 14px;font-size:1.05rem;line-height:1.55}
+.hb-rev figcaption{font-size:.88rem;opacity:.75;font-style:normal}
+.hb-rev--quote .hb-revs{grid-template-columns:1fr;max-width:74ch}
+.hb-rev--quote .hb-rev blockquote{font-size:1.25rem}
+.hb-rev--card .hb-revs{grid-template-columns:repeat(3,1fr)}
+.hb-rev--row .hb-revs{grid-template-columns:1fr}
+.hb-rev--row .hb-rev{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;padding:20px 0}
+.hb-rev--row .hb-rev blockquote{margin:0}
+@media(max-width:980px){.hb-rev--card .hb-revs{grid-template-columns:1fr}}
+@media(max-width:620px){.hb-rev--row .hb-rev{grid-template-columns:1fr;gap:8px}}
+@media(max-width:980px){
+  .v-grid-g4 .hb-svcs,.v-grid-g4 .hb-guides,.v-grid-g4 .hb-doors{grid-template-columns:repeat(2,1fr)}
+  .v-foot-split .tc-fcols{grid-template-columns:1fr 1fr}
+}
+@media(max-width:620px){
+  .v-grid-g2 .hb-svcs,.v-grid-g2 .hb-guides,.v-grid-g2 .hb-doors,
+  .v-grid-g4 .hb-svcs,.v-grid-g4 .hb-guides,.v-grid-g4 .hb-doors,
+  .v-grid-g2 .hb-sigs,.v-grid-g2 .hb-tips{grid-template-columns:1fr}
+  .v-nav-wide .tc-inner{padding-left:18px;padding-right:18px}
+  .v-space-airy .hb{padding-top:60px;padding-bottom:60px}
+}
+"""
+
+
 # ---------------------------------------------------------------- local conditions
 # The engine's biggest content problem is that a Boone page and a Mesa page say the same
 # thing with the city name swapped. Conditions fix that at the source: a site in Arizona
@@ -854,7 +1025,8 @@ def faq_schema(faqs):
 
 def head_html(t, title, desc, url, schemas, og_image=HERO_IMG):
     lay = t["layout"]
-    bodycls = f'lay-nav-{lay["nav"]} lay-bands-{lay["bands"]} shape-{lay["shape"]}'
+    bodycls = (f'lay-nav-{lay["nav"]} lay-bands-{lay["bands"]} shape-{lay["shape"]} '
+               + variant_classes(t))
     graph = {"@context": "https://schema.org", "@graph": schemas}
     og = f"https://{t['domain']}/assets/photos/{og_image}" if og_image else ""
     ogtags = (f'<meta property="og:image" content="{og}">\n<meta name="twitter:image" content="{og}">' if og else "")
@@ -877,7 +1049,7 @@ def head_html(t, title, desc, url, schemas, og_image=HERO_IMG):
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="{'image/png' if t.get('has_logo') else 'image/svg+xml'}" href="{'/assets/favicon.png' if t.get('has_logo') else '/assets/favicon.svg'}">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={t['fonts']}&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?{type_fonts(t)}&display=swap">
 <link rel="stylesheet" href="/assets/site.css">
 {preload}
 <script type="application/ld+json">{json.dumps(graph)}</script>
@@ -1738,7 +1910,8 @@ def trust_page(t, pages, url, h1, blocks, is_quote=False):
 # ---------------------------------------------------------------- renderer dispatch
 # The default "garage" design is the module functions above. Alternate full designs
 # (ironclad / volt / nimbus) live in templates.py and expose the same interface.
-GARAGE = {"css": lambda t: css(t) + GD_CSS + QFORM_CSS + actionbar_css(t) + fx_css(t), "navjs": NAVJS,
+GARAGE = {"css": lambda t: css(t) + GD_CSS + QFORM_CSS + actionbar_css(t) + fx_css(t)
+                           + VARIANT_CSS + type_css(t), "navjs": NAVJS,
           "home": lambda t, pages: home_page(t, pages),
           "inner": lambda t, p, pages: inner_page(t, p, pages),
           "index": lambda t, pages, cat, url, h1, eb, bl: index_page(t, pages, cat, url, h1, eb, bl),

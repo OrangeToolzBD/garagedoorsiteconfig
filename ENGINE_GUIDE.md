@@ -841,6 +841,77 @@ at-a-glance stats, hearth with a warm intro, quarry with symptoms and the safety
 so the shuffle never erases a design's identity. `drop` lets ironclad and nimbus skip the
 blocks they render in their own markup.
 
+### Site variation at 1000-site scale
+
+There is no version of "pick a nice layout" that survives a thousand sites and several
+people, so the look is **derived**, not assigned. `build.recipe()` hashes the domain into
+a choice on every axis:
+
+| Axis | Options |
+|---|---|
+| `nav` | left, center, split, wide |
+| `hero` | tall, compact, left, center |
+| `btn` | pill, round, sharp, wide |
+| `card` | raised, flat, outline, edge |
+| `foot` | cols, stack, center, split |
+| `space` | tight, normal, airy |
+| `img` | square, round, soft |
+| `grid` | 2, 3 or 4 per row |
+| `cta` | end, mid, both |
+| `reviews` | quote, card, row |
+| typography | 10 display/body pairings |
+| section selection | 2 of 8 optional blocks dropped |
+| section order | per-domain ordering of the explanatory middle |
+
+10 designs x the axes x 10 type pairings is ~24.9M base combinations before section
+order and selection. Every combination is one the CSS was written to handle — that is
+the difference between variation and randomness.
+
+Each axis emits a class onto `<body>` (`v-nav-split`, `v-card-outline`, …) and
+`VARIANT_CSS` defines what it means. Axes change **structure only, never colour**, so
+they compose with any design's palette. Typography is applied through `--v-disp` /
+`--v-body` appended after the design's stylesheet, so no design's font rules had to be
+rewritten and a design's character fonts (quarry's mono labels, ironclad's serif detail)
+survive.
+
+Because it is derived, nothing is stored and nothing needs syncing: a domain always
+builds the same site, rebuilds stay diffable, and adding a domain needs no decision.
+
+**Measured:** across the ten built sites, homepage pairs above 90% similarity: 0 of 45,
+maximum 54%.
+
+### Reviews are data-gated, permanently
+
+`hb_reviews()` renders only from `testimonials` in sites.json and has **no fallback
+copy** — no data, no section. That is deliberate: this engine shipped invented five-star
+testimonials with made-up names twice (ironclad, then nimbus), and a review block that
+can write its own reviews is the easiest way for that to happen a third time. `rating` +
+`reviews` (a count) drive the summary line and are equally optional.
+
+### One Git repo per site
+
+`site_repos.py` publishes each `dist/<domain>/` into its own repository, so a site can be
+pushed, built and deployed independently. One repo of 1000 sites would mean every site
+redeploys when any site changes, one bad build blocks all of them, and the checkout grows
+to gigabytes.
+
+    python site_repos.py --list
+    python site_repos.py --remote "git@github.com:ORG/{slug}.git" --push
+
+The working tree is *replaced* from `dist/` on each publish (`.git` preserved), so a file
+that stopped being generated stops existing. Each repo gets a README saying not to
+hand-edit it, and `vercel.json` ships inside, so a Vercel project needs no build step or
+framework preset. Nothing is pushed without `--push`, and no remote is ever invented.
+
+### engine.py bulk
+
+Fixed. It raised `KeyError: 'layouts'` on the first new domain — `config/layouts.json` is
+a dict of *named* variants with no list to append to — so the command was a no-op, and
+`build.py` never read that per-domain data anyway. The `layouts.py` integration is
+removed (and the file deleted): everything it was meant to achieve is now derived by
+`recipe()`. `bulk` also spreads registrations across the ten designs by writing an
+explicit `template`, so a teammate can see and change which design a site is on.
+
 ### Verified
 
 Rebuilt and checked in-browser at 375 px and 1280 px. Across 202 pages: **0 broken

@@ -72,6 +72,10 @@ def _inner(t, p):
 
 # ---------------------------------------------------------------- shared bits
 def _head(t, title, desc, url, schemas, fonts, bodyclass="", og=None):
+    # the design's own `fonts` argument is superseded by the site's pairing; keeping the
+    # parameter means no design signature had to change
+    fonts = H.type_fonts(t)
+    bodyclass = (bodyclass + " " + H.variant_classes(t)).strip()
     e = H.esc
     graph = {"@context": "https://schema.org", "@graph": schemas}
     ogm = preload = ""
@@ -1130,6 +1134,41 @@ def hb_local(t, pages, eyebrow="Local knowledge"):
             f'<div class="hb-prose">{H.render_body(body)}</div></div></section>')
 
 
+def hb_reviews(t, eyebrow="In their words"):
+    """Customer reviews, in one of three layouts chosen per domain.
+
+    Renders ONLY from `reviews` in sites.json -- a list of {quote, name, area?}. There
+    is no fallback copy and no placeholder, deliberately: this engine has twice shipped
+    invented five-star testimonials with made-up names, and a review block that writes
+    its own reviews is the single easiest way for that to happen again. No data, no
+    section.
+
+    Shape:  "testimonials": [{"quote": "...", "name": "R. Patel", "area": "Oak Lawn"}]
+
+    Note the key is `testimonials`, not `reviews`: sites.json already uses `reviews` for
+    a review *count* string that pairs with `rating`, and both are read below.
+    """
+    items = [r for r in (t.get("testimonials") or []) if isinstance(r, dict)
+             and (r.get("quote") or "").strip()]
+    if not items:
+        return ""
+    e = H.esc
+    layout = H.recipe(t)["reviews"]
+    cells = ""
+    for r in items:
+        who = e(r.get("name") or "Verified customer")
+        where = f' &middot; {e(r["area"])}' if r.get("area") else ""
+        cells += (f'<figure class="hb-rev"><blockquote>{e(r["quote"])}</blockquote>'
+                  f'<figcaption>{who}{where}</figcaption></figure>')
+    rating = ""
+    if t.get("rating") and t.get("reviews"):
+        rating = (f'<p class="hb-lead">{e(str(t["rating"]))} out of 5 from '
+                  f'{e(str(t["reviews"]))} reviews</p>')
+    return (f'<section class="hb hb--rev hb-rev--{layout}"><div class="hb-wrap">'
+            f'<p class="hb-eyebrow">{e(eyebrow)}</p><h2>What {e(t["city"])} customers say</h2>'
+            f'{rating}<div class="hb-revs">{cells}</div></div></section>')
+
+
 def hb_announce(t):
     """Thin bar above the header. Renders only when `announce` is configured for the
     site (or in defaults) -- an empty promo bar is worse than none, and inventing a
@@ -1302,8 +1341,9 @@ def hb_stack(t, pages, faqs, pin=(), drop=()):
         "local":    lambda: hb_local(t, pages),
         "segments": lambda: hb_segments(t, pages),
         "guides":   lambda: hb_guides(t, pages),
+        "reviews":  lambda: hb_reviews(t),
     }
-    for name in drop:
+    for name in tuple(drop) + tuple(H.recipe(t)["drop"]):
         blocks.pop(name, None)
     pinned = [(n, blocks.pop(n)) for n in pin if n in blocks]
     middle = _domain_order(list(blocks.items()), t.get("domain", ""))
@@ -1471,7 +1511,8 @@ def _mk(css_str, home, inner, index, trust, blocks=False):
     # always wins on colour/type, never on the layout that makes the nav work.
     base = CHROME_CSS + (PAGE_CSS + BLOCK_CSS if blocks else "")
     return {"css": (lambda cs: (lambda t: base + _paint(cs, t) + A11Y_CSS + H.QFORM_CSS
-                                          + H.actionbar_css(t) + H.fx_css(t)))(css_str),
+                                          + H.actionbar_css(t) + H.fx_css(t)
+                                          + H.VARIANT_CSS + H.type_css(t)))(css_str),
             "home": home,
             "inner": (lambda fn: (lambda t, p, pages: fn(t, pages, p)))(inner),
             "index": index, "trust": trust}
