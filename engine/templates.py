@@ -549,17 +549,13 @@ def iron_home(t, pages):
               f'<div class="tl"><div class="tl__no serif">II</div><h3>Inspection</h3><p>On time, a written assessment, a price before a wrench turns.</p></div>'
               f'<div class="tl"><div class="tl__no serif">III</div><h3>The Work</h3><p>Done once, cleanly, with parts sized for the door.</p></div>'
               f'<div class="tl"><div class="tl__no serif">IV</div><h3>Aftercare</h3><p>Notes on what we found, and a standing line for questions.</p></div></div></section>'
-            # This block used to print two five-star "customer quotes" -- one of them the
-            # text of an FAQ answer, attributed to a homeowner. Nobody said either. It now
-            # renders the FAQ as an FAQ, which is also what the FAQPage schema claims.
-            + f'<section class="sec quotes"><div class="wrap quotes__grid">'
-              f'<div class="q"><span class="kick">Asked often</span>'
-              f'<blockquote class="serif">{e(q[0])}</blockquote><cite>{e(q[1])}</cite></div>'
-              f'<div class="q"><span class="kick">Asked often</span>'
-              f'<blockquote class="serif">{e(faqs[1][0]) if len(faqs) > 1 else "What does a visit cost?"}</blockquote>'
-              f'<cite>{e(faqs[1][1]) if len(faqs) > 1 else "You get a written price on site before any work starts."}</cite></div></div></section>'
+            # This slot held two five-star "customer quotes" -- one of them the text of
+            # an FAQ answer attributed to a homeowner. Nobody said either, so it was
+            # rewritten to show the FAQ honestly. Now that hb_faq() renders the full FAQ
+            # with its schema a few sections below, showing the first two questions here
+            # as well just says the same thing twice, so the slot is gone.
             + hb_stack(t, pages, faqs, pin=("about", "safety"),
-                       drop=("services", "steps", "guides"))
+                       drop=("services", "steps", "guides", "cta"))
             + f'<section class="sec est wrap"><div class="est__grid">'
               f'<div><span class="kick">Begin</span><h2 class="serif">Every door is a conversation.</h2>'
               f'<p>Tell us what yours is doing, and we\'ll tell you honestly what it needs — repair, restoration, or a fresh install for your {e(t["city"])} home.</p>'
@@ -769,7 +765,7 @@ def nim_home(t, pages):
             # and quotes -- nobody said any of it. Same violation removed from
             # ironclad earlier; it was missed here. Now real content blocks.
             + hb_stack(t, pages, faqs, pin=("about", "tips"),
-                       drop=("services", "steps"))
+                       drop=("services", "steps", "faq", "cta"))
             + f'<section class="sec" style="padding-bottom:20px"><div class="wrap"><div class="sec__head"><span class="eyebrow">Good to know</span><h2>Little questions, answered</h2></div><div class="faqs">{faq}</div></div></section>'
             + f'<div class="ctawrap"><div class="cta"><h2>Let\'s get that door smiling again 🙂</h2><p>Book a warm, no-pressure visit with your {e(t["city"])} neighbors.</p><a class="btn" href="{chref}">📞 {clabel}</a></div></div>'
             + _nim_footer(t, pages) + "</body></html>")
@@ -1352,7 +1348,15 @@ def hb_stack(t, pages, faqs, pin=(), drop=()):
     out = [] if "services" in drop else [hb_services(t, pages)]
     out += [fn() for _, fn in pinned]
     out += [fn() for _, fn in middle]
-    out += [hb_areas(t, pages), hb_faq(faqs), hb_cta(t)]
+    # The closing anchors are droppable as well: nimbus ends with its own FAQ accordion
+    # and CTA panel, ironclad with its own estimate band. Appending the shared ones on
+    # top printed the same questions and the same call to action twice.
+    if "areas" not in drop:
+        out.append(hb_areas(t, pages))
+    if "faq" not in drop:
+        out.append(hb_faq(faqs))
+    if "cta" not in drop:
+        out.append(hb_cta(t))
     return "".join(out)
 
 
