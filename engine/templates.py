@@ -246,7 +246,9 @@ def _chrome_header(t, pages, cta="Request a Quote"):
         mobile += tel
 
     top = _tel(t, cls="tc-tel")
-    return (f'<header class="tc-bar"><div class="tc-inner">'
+    # announcement bar sits above the sticky header, so it scrolls away with the page
+    return (hb_announce(t)
+            + f'<header class="tc-bar"><div class="tc-inner">'
             f'{_chrome_brand(t)}'
             f'<nav class="tc-nav" aria-label="Main">{desktop}</nav>'
             f'<div class="tc-acts">{top}<a class="tc-cta" href="/request-a-quote/">{e(cta)}</a></div>'
@@ -552,6 +554,7 @@ def iron_home(t, pages):
               f'<div class="q"><span class="kick">Asked often</span>'
               f'<blockquote class="serif">{e(faqs[1][0]) if len(faqs) > 1 else "What does a visit cost?"}</blockquote>'
               f'<cite>{e(faqs[1][1]) if len(faqs) > 1 else "You get a written price on site before any work starts."}</cite></div></div></section>'
+            + hb_about(t, pages) + hb_segments(t, pages) + hb_stats(t, pages)
             + f'<section class="sec est wrap"><div class="est__grid">'
               f'<div><span class="kick">Begin</span><h2 class="serif">Every door is a conversation.</h2>'
               f'<p>Tell us what yours is doing, and we\'ll tell you honestly what it needs — repair, restoration, or a fresh install for your {e(t["city"])} home.</p>'
@@ -757,10 +760,10 @@ def nim_home(t, pages):
             + f'<section class="sec"><div class="wrap why"><div class="why__img"><img src="{PHOTOS}{_card(t, 2, "gd-3.jpg")}" alt="A friendly technician" width="1200" height="900" loading="lazy" decoding="async"><div class="why__badge">🧡 Neighborly by nature</div></div>'
               f'<div><span class="eyebrow">Why folks pick us</span><h2>Fewer surprises, more smiles</h2><p style="color:var(--soft)">We treat your home like our own and your time like it matters.</p>'
               f'<ul class="checks"><li><span class="c">✓</span>Upfront prices, always explained</li><li><span class="c">✓</span>Friendly, vetted technicians</li><li><span class="c">✓</span>Tidy work &amp; clean-up after</li><li><span class="c">✓</span>No-pressure, honest advice</li></ul></div></div></section>'
-            + f'<section class="sec"><div class="wrap"><div class="sec__head"><span class="eyebrow">Kind words</span><h2>Neighbors say the sweetest things</h2></div><div class="bubbles">'
-              f'<div class="bubble"><div class="stars">★★★★★</div><p>"So refreshing. Explained everything, no jargon, no pressure. My door\'s never been quieter!"</p><div class="who"><span class="av"></span><div><b>Priya S.</b><span>{e(t["city"])}</span></div></div></div>'
-              f'<div class="bubble"><div class="stars">★★★★★</div><p>"Texted at breakfast, fixed by lunch. Genuinely lovely people to have in your driveway."</p><div class="who"><span class="av"></span><div><b>Marcus L.</b><span>{e(t["city"])}</span></div></div></div>'
-              f'<div class="bubble"><div class="stars">★★★★★</div><p>"They could\'ve sold me a new door and didn\'t. Just an honest little repair. Customers for life."</p><div class="who"><span class="av"></span><div><b>Dana &amp; Rob</b><span>{e(t["city"])}</span></div></div></div></div></div></section>'
+            # This was three five-star "neighbor" testimonials with invented names
+            # and quotes -- nobody said any of it. Same violation removed from
+            # ironclad earlier; it was missed here. Now real content blocks.
+            + hb_about(t, pages) + hb_segments(t, pages) + hb_stats(t, pages)
             + f'<section class="sec" style="padding-bottom:20px"><div class="wrap"><div class="sec__head"><span class="eyebrow">Good to know</span><h2>Little questions, answered</h2></div><div class="faqs">{faq}</div></div></section>'
             + f'<div class="ctawrap"><div class="cta"><h2>Let\'s get that door smiling again 🙂</h2><p>Book a warm, no-pressure visit with your {e(t["city"])} neighbors.</p><a class="btn" href="{chref}">📞 {clabel}</a></div></div>'
             + _nim_footer(t, pages) + "</body></html>")
@@ -995,16 +998,115 @@ def hb_signals(t, eyebrow="Why homeowners call us"):
 
 
 def hb_areas(t, pages, eyebrow="Where we work"):
+    """Service areas, split into neighborhoods inside the city and nearby communities
+    when the content distinguishes them (the nb-/sub- filename prefix, kept as
+    page["kind"]). Falls back to one flat list when a site only has one kind."""
     e = H.esc
     areas = _cat(pages, "area")
     if not areas:
         return ""
-    links = "".join(f'<a href="{p["url"]}">{e(H.area_label(p))}</a>' for p in areas)
+    nb = [p for p in areas if p.get("kind") == "nb"]
+    sub = [p for p in areas if p.get("kind") == "sub"]
+    link = lambda p: f'<a href="{p["url"]}">{e(H.area_label(p))}</a>'
+    if nb and sub:
+        body = (f'<div class="hb-atier"><h3>{e(t["city"])} neighborhoods</h3>'
+                f'<div class="hb-areas">{"".join(link(p) for p in nb)}</div></div>'
+                f'<div class="hb-atier"><h3>Nearby communities</h3>'
+                f'<div class="hb-areas">{"".join(link(p) for p in sub)}</div></div>')
+    else:
+        body = f'<div class="hb-areas">{"".join(link(p) for p in areas)}</div>'
     return (f'<section class="hb hb--areas"><div class="hb-wrap">'
             f'<p class="hb-eyebrow">{e(eyebrow)}</p>'
             f'<h2>Serving {e(t["city"])} and nearby</h2>'
-            f'<div class="hb-areas">{links}</div>'
+            f'<p class="hb-lead">{len(areas)} {e(t["city"])}-area neighborhoods and '
+            f'communities we cover - is your street on the list?</p>'
+            f'<div class="hb-atiers">{body}</div>'
             f'<a class="hb-more" href="/service-areas/">All service areas</a></div></section>')
+
+
+def hb_announce(t):
+    """Thin bar above the header. Renders only when `announce` is configured for the
+    site (or in defaults) -- an empty promo bar is worse than none, and inventing a
+    seasonal offer would put a claim on the page nobody agreed to."""
+    msg = (t.get("announce") or "").strip()
+    if not msg:
+        return ""
+    link = ""
+    if t.get("announce_url"):
+        link = f' <a href="{H.esc(t["announce_url"])}">{H.esc(t.get("announce_cta") or "Learn more")}</a>'
+    return f'<div class="hb-announce"><div class="hb-wrap"><span>{H.esc(msg)}</span>{link}</div></div>'
+
+
+def hb_stats(t, pages):
+    """A small counted strip. Every figure is derived from what this site actually
+    contains -- services built, areas covered, guides written -- so nothing here is a
+    number someone has to stand behind. Deliberately no population or "jobs completed"
+    figure: neither is in the data, and both would be invented."""
+    e = H.esc
+    svc, areas, guides = _cat(pages, "service"), _cat(pages, "area"), _cat(pages, "guide")
+    items = []
+    if svc:
+        items.append((str(len(svc)), "Services offered"))
+    if areas:
+        items.append((str(len(areas)), "Areas covered"))
+    if guides:
+        items.append((str(len(guides)), "Guides written"))
+    items.append(("Diagnosis", "first, then the fix"))
+    cells = "".join(f'<div class="hb-stat"><b>{e(n)}</b><span>{e(l)}</span></div>' for n, l in items)
+    return f'<section class="hb hb--stats"><div class="hb-wrap"><div class="hb-statrow">{cells}</div></div></section>'
+
+
+def hb_about(t, pages, eyebrow="About"):
+    """A short business introduction on the homepage. The site has an /about/ page, but
+    nothing on the homepage ever said who the company is."""
+    e = H.esc
+    home = pages.get("/")
+    # prefer the city's own copy where the content JSON provides it
+    intro = ""
+    for sec in (home or {}).get("sections", []):
+        body = (sec.get("body") or "").strip()
+        if body and not body.startswith("-"):
+            intro = body.split("\n\n")[0]
+            break
+    if not intro:
+        intro = (f"{t['brand']} works on garage doors across {t['city']}, {t['st']} and the "
+                 f"surrounding metro - repair, spring and opener service, and new-door "
+                 f"installation.")
+    second = (f"Garage door problems are usually urgent: a car shut in, or a door that will "
+              f"not close and seal the house. The approach is to say plainly what a door "
+              f"needs, what it does not, and when a repair makes better sense than a "
+              f"replacement - or the other way round.")
+    return (f'<section class="hb hb--about"><div class="hb-wrap">'
+            f'<p class="hb-eyebrow">{e(eyebrow)}</p><h2>About {e(t["brand"])}</h2>'
+            f'<div class="hb-prose"><p>{e(intro)}</p><p>{e(second)}</p></div></div></section>')
+
+
+def hb_segments(t, pages, eyebrow="Who we help"):
+    """Residential / commercial split.
+
+    Gated on a `commercial` flag because it is a claim about what this business takes
+    on, not a design choice -- asserting commercial service for 1000 domains nobody has
+    checked is the same mistake as the invented "Est. 2004". Turn it on per site, or
+    once in the `defaults` block of config/sites.json."""
+    if not t.get("commercial"):
+        return ""
+    e = H.esc
+    svc_url = "/services/" if _cat(pages, "service") else "/request-a-quote/"
+    cards = [
+        ("Residential", f"Homes in {t['city']}",
+         "Repair, spring and opener service, and new door installation for single- "
+         "and double-car home garages."),
+        ("Commercial", "Businesses and property",
+         "Rolling steel, sectional and dock doors, serviced with the higher cycle "
+         "counts of commercial use in mind."),
+    ]
+    cells = "".join(
+        f'<a class="hb-seg" href="{svc_url}"><span class="hb-seg__k">{e(k)}</span>'
+        f'<h3>{e(h)}</h3><p>{e(b)}</p><span class="hb-more">See services</span></a>'
+        for k, h, b in cards)
+    return (f'<section class="hb hb--seg"><div class="hb-wrap">'
+            f'<p class="hb-eyebrow">{e(eyebrow)}</p><h2>Residential &amp; commercial</h2>'
+            f'<div class="hb-segs">{cells}</div></div></section>')
 
 
 def hb_guides(t, pages, eyebrow="Good to know"):
@@ -1076,6 +1178,28 @@ BLOCK_CSS = """
 .hb-sig h3{margin:0 0 8px;font-size:1.05rem}.hb-sig p{margin:0;opacity:.8;font-size:.94rem}
 .hb-areas{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:22px}
 .hb-areas a{padding:12px 14px;text-decoration:none;color:inherit}
+.hb-lead{margin:-18px 0 26px;max-width:62ch;opacity:.8}
+.hb-atiers{display:flex;flex-direction:column;gap:26px;margin-bottom:8px}
+.hb-atier h3{margin:0 0 12px;font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;opacity:.7}
+/* announcement bar */
+.hb-announce{width:100%;font-size:.9rem}
+.hb-announce .hb-wrap{display:flex;gap:10px;justify-content:center;align-items:center;
+  flex-wrap:wrap;padding-top:9px;padding-bottom:9px;text-align:center}
+.hb-announce a{color:inherit;text-decoration:underline}
+/* stat strip */
+.hb--stats{padding:0}
+.hb-statrow{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;padding:26px 0}
+.hb-stat{display:flex;flex-direction:column;gap:2px}
+.hb-stat b{font-size:clamp(1.5rem,3vw,2.1rem);line-height:1.05}
+.hb-stat span{font-size:.88rem;opacity:.75}
+/* about */
+.hb-prose{max-width:68ch;display:flex;flex-direction:column;gap:14px}
+/* residential / commercial */
+.hb-segs{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.hb-seg{display:block;padding:30px;text-decoration:none;color:inherit}
+.hb-seg__k{display:inline-block;font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;
+  opacity:.7;margin-bottom:10px}
+.hb-seg h3{margin:0 0 10px}.hb-seg p{margin:0 0 14px;opacity:.8}
 .hb-guides{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 .hb-guide{display:flex;flex-direction:column;text-decoration:none;color:inherit;overflow:hidden}
 .hb-guide__img{display:block;overflow:hidden}
@@ -1092,12 +1216,14 @@ BLOCK_CSS = """
 .hb-cta__btn{display:inline-block;padding:15px 30px;text-decoration:none;font-weight:700}
 .hb-photo{width:100%;height:auto;display:block}
 @media(max-width:980px){
-  .hb-svcs,.hb-steps,.hb-guides{grid-template-columns:1fr}
-  .hb-sigs,.hb-areas{grid-template-columns:1fr 1fr}
+  .hb-svcs,.hb-steps,.hb-guides,.hb-segs{grid-template-columns:1fr}
+  .hb-sigs,.hb-areas,.hb-statrow{grid-template-columns:1fr 1fr}
 }
 @media(max-width:620px){
   .hb{padding:52px 0}.hb-wrap{padding:0 18px}
   .hb-sigs,.hb-areas{grid-template-columns:1fr}
+  .hb-statrow{gap:14px}
+  .hb-seg{padding:24px}
 }
 """
 
@@ -1253,7 +1379,8 @@ def forge_home(t, pages):
               f'<div class="fg-acts">{call}<a class="fg-btn fg-btn--ghost" href="/services/">See what we fix</a></div>'
               f'</div></section>'
             + f'<div class="fg-rail">{rail}</div>'
-            + hb_services(t, pages) + hb_steps(t) + hb_signals(t)
+            + hb_stats(t, pages) + hb_about(t, pages)
+            + hb_services(t, pages) + hb_segments(t, pages) + hb_steps(t) + hb_signals(t)
             + hb_areas(t, pages) + hb_guides(t, pages) + hb_faq(faqs) + hb_cta(t)
             + _chrome_footer(t, pages) + "</body></html>")
 
@@ -1341,8 +1468,9 @@ def coast_home(t, pages):
             + f'<div class="cs-strip"><div><span><b>Same-day</b> on most repairs</span>'
               f'<span><b>Written</b> prices, not ranges</span>'
               f'<span><b>Springs, openers, panels</b> and full replacements</span></div></div>'
-            + hb_services(t, pages) + hb_signals(t) + hb_guides(t, pages)
-            + hb_steps(t) + hb_areas(t, pages) + hb_faq(faqs) + hb_cta(t)
+            + hb_about(t, pages) + hb_services(t, pages) + hb_signals(t)
+            + hb_guides(t, pages) + hb_segments(t, pages) + hb_steps(t)
+            + hb_stats(t, pages) + hb_areas(t, pages) + hb_faq(faqs) + hb_cta(t)
             + _chrome_footer(t, pages) + "</body></html>")
 
 
@@ -1425,7 +1553,8 @@ def beacon_home(t, pages):
               f'<a class="bc-btn bc-btn--alt" href="/request-a-quote/">Get a free quote</a></div></div></section>'
             + f'<div class="bc-band"><div><span>Same-day on most repairs</span>'
               f'<span>Written prices</span><span>Springs · Openers · Panels · New doors</span></div></div>'
-            + hb_services(t, pages) + hb_steps(t) + hb_signals(t)
+            + hb_stats(t, pages) + hb_services(t, pages) + hb_segments(t, pages)
+            + hb_steps(t) + hb_about(t, pages) + hb_signals(t)
             + hb_guides(t, pages) + hb_areas(t, pages) + hb_faq(faqs) + hb_cta(t, cta="Get a free quote")
             + _chrome_footer(t, pages) + "</body></html>")
 
@@ -1514,7 +1643,8 @@ def atlas_home(t, pages):
               f'<p>{e(lead)}</p><div class="at-acts">{call}'
               f'<a class="at-btn at-btn--alt" href="/services/">Browse services</a></div></div>'
               f'<div class="at-spec"><h2>At a glance</h2><dl>{spec}</dl></div></div></section>'
-            + hb_services(t, pages) + hb_signals(t) + hb_steps(t)
+            + hb_stats(t, pages) + hb_about(t, pages) + hb_services(t, pages)
+            + hb_segments(t, pages) + hb_signals(t) + hb_steps(t)
             + hb_areas(t, pages) + hb_guides(t, pages) + hb_faq(faqs) + hb_cta(t)
             + _chrome_footer(t, pages) + "</body></html>")
 
@@ -1600,8 +1730,9 @@ def hearth_home(t, pages):
               f'<a class="ht-btn ht-btn--alt" href="/request-a-quote/">Book a visit</a></div></div>'
               f'<div class="ht-card__img"><img src="{PHOTOS}{_hero(t)}" alt="{e(t["city"])} garage door" '
               f'width="1200" height="900" fetchpriority="high" decoding="async"></div></div></section>'
-            + hb_signals(t) + hb_services(t, pages) + hb_steps(t)
-            + hb_guides(t, pages) + hb_areas(t, pages) + hb_faq(faqs) + hb_cta(t, cta="Book a visit")
+            + hb_about(t, pages) + hb_signals(t) + hb_services(t, pages)
+            + hb_segments(t, pages) + hb_steps(t) + hb_guides(t, pages)
+            + hb_stats(t, pages) + hb_areas(t, pages) + hb_faq(faqs) + hb_cta(t, cta="Book a visit")
             + _chrome_footer(t, pages) + "</body></html>")
 
 
@@ -1690,7 +1821,8 @@ def quarry_home(t, pages):
               f'<div class="qy-slab"><img src="{PHOTOS}{_hero(t)}" alt="{e(t["city"])} garage door" '
               f'width="1600" height="900" fetchpriority="high" decoding="async"></div>'
               f'<div class="qy-meta">{meta}</div></section>'
-            + hb_services(t, pages) + hb_steps(t) + hb_guides(t, pages)
+            + hb_stats(t, pages) + hb_services(t, pages) + hb_segments(t, pages)
+            + hb_steps(t) + hb_about(t, pages) + hb_guides(t, pages)
             + hb_signals(t) + hb_areas(t, pages) + hb_faq(faqs) + hb_cta(t, cta="Get a quote")
             + _chrome_footer(t, pages) + "</body></html>")
 
@@ -1777,7 +1909,8 @@ def verdant_home(t, pages):
             + f'<div class="vd-band"><img src="{PHOTOS}{_hero(t)}" alt="{e(t["city"])} garage door" '
               f'width="1600" height="900" fetchpriority="high" decoding="async"></div>'
             + f'<div class="vd-pills">{pills}</div>'
-            + hb_services(t, pages) + hb_steps(t) + hb_signals(t)
+            + hb_stats(t, pages) + hb_services(t, pages) + hb_segments(t, pages)
+            + hb_about(t, pages) + hb_steps(t) + hb_signals(t)
             + hb_areas(t, pages) + hb_guides(t, pages) + hb_faq(faqs) + hb_cta(t)
             + _chrome_footer(t, pages) + "</body></html>")
 

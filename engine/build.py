@@ -340,6 +340,8 @@ GD_CSS = """
 .gf-logo{display:flex;align-items:center;gap:11px;color:#fff;font-family:var(--disp);font-weight:800;font-size:1.2rem;margin-bottom:14px;text-decoration:none}
 .gf-mark{width:42px;height:42px;border-radius:11px;background:#fff;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .gf-logo-img{height:128px;width:auto;max-width:320px;display:block}
+.areas-tier{margin-bottom:22px}
+.areas-tier h3{font-size:.76rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
 /* The logos are dark artwork on transparency; on this near-black footer they need a
    light plate behind them or they read as an empty gap. */
 .gf-logo:has(.gf-logo-img){background:#fff;border-radius:16px;padding:12px 20px;
@@ -752,6 +754,11 @@ def load_content(t):
         faqs = [(f.get("q", ""), f.get("a", "")) for f in data.get("faq", []) if f.get("q")]
         pages[url] = {
             "cat": cat, "slug": slug, "url": url,
+            # "nb" (a neighborhood inside the city) vs "sub" (a nearby community) is
+            # already encoded in the filename and used to be thrown away here. Keeping
+            # it lets the areas section split into two real tiers instead of one flat
+            # list -- the distinction is in the content, not invented at render time.
+            "kind": ptype,
             "h1": data.get("h1", ""), "title": data.get("title", ""),
             "meta": data.get("meta", ""), "sections": data.get("sections", []),
             "faq": faqs, "area_served": data.get("schema_facts", {}).get("areaServed", t["city"]),
@@ -1070,16 +1077,27 @@ def how_it_works(t, intro=""):
             f'</div></div></section>')
 
 # ---- showcase-variant sections (inspired by the reference design) ----
-def stats_band(t):
-    """Config-driven credibility row. Renders only if the site defines 'stats'
-    (a list of [number, label] pairs) — never fabricates numbers."""
+def stats_band(t, pages=None):
+    """Credibility row. Uses the site's configured 'stats' ([number, label] pairs) when
+    present; otherwise falls back to figures counted from what this site actually
+    contains — services built, areas covered, guides written. Still never fabricates:
+    there is deliberately no population or "jobs completed" number, because neither is
+    in the data and both would have to be invented."""
     stats = t.get("stats") or []
+    if not stats and pages:
+        counted = [(len([p for p in pages.values() if p["cat"] == c]), label)
+                   for c, label in (("service", "Services offered"),
+                                    ("area", "Areas covered"),
+                                    ("guide", "Guides written"))]
+        stats = [(str(n), l) for n, l in counted if n]
+        if stats:
+            stats.append(("Diagnosis", "first, then the fix"))
     if not stats:
         return ""
     cells = "".join(f'<div class="stat"><b>{esc(str(n))}</b><span>{esc(str(l))}</span></div>' for n, l in stats)
     return f'<div class="stats">{cells}</div>'
 
-def why_us_split(t):
+def why_us_split(t, pages=None):
     """Two-column 'why us': copy + checklist beside an image (+ optional review badge)."""
     checks = ["Local, licensed technicians", "Upfront, written quotes",
               "Parts and labor warranty", "No overtime or weekend fees"]
@@ -1098,7 +1116,7 @@ def why_us_split(t):
             f'<p>From the first call to the final test, you get straight answers, clean workmanship, and a warranty that actually means something.</p>'
             f'<ul class="checklist">{li}</ul></div>'
             f'<div class="whyx__img"><img src="/assets/photos/{img}" alt="Garage door service in {esc(t["city"])}" width="1200" height="900" loading="lazy" decoding="async">{badge}</div>'
-            f'</div>{stats_band(t)}</div></section>')
+            f'</div>{stats_band(t, pages)}</div></section>')
 
 def _svg_mail():
     return ('<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" '
@@ -1266,13 +1284,28 @@ def areas_band(t, pages, prose=""):
     areas = [p for u, p in pages.items() if p["cat"] == "area"]
     if not areas:
         return ""
-    chips = "".join(f'<a href="{p["url"]}">{esc(area_label(p))}</a>' for p in areas[:16])
+    # Split into neighborhoods inside the city vs nearby communities where the content
+    # distinguishes them (the nb-/sub- filename prefix, kept as page["kind"]). One flat
+    # list reads as an undifferentiated keyword dump; two tiers match how someone
+    # actually looks for their own street.
+    nb = [p for p in areas if p.get("kind") == "nb"]
+    sub = [p for p in areas if p.get("kind") == "sub"]
+    chip = lambda p: f'<a href="{p["url"]}">{esc(area_label(p))}</a>'
+    if nb and sub:
+        grid = (f'<div class="areas-tier"><h3>{esc(t["city"])} neighborhoods</h3>'
+                f'<div class="areas">{"".join(chip(p) for p in nb[:16])}</div></div>'
+                f'<div class="areas-tier"><h3>Nearby communities</h3>'
+                f'<div class="areas">{"".join(chip(p) for p in sub[:16])}'
+                f'<a class="areas__all" href="/service-areas/">View all areas {icon("arrow")}</a></div></div>')
+    else:
+        grid = (f'<div class="areas">{"".join(chip(p) for p in areas[:16])}'
+                f'<a class="areas__all" href="/service-areas/">View all areas {icon("arrow")}</a></div>')
     blurb = (f'<div class="prose prose--tight">{render_body(prose)}</div>' if prose else
-             '<p>Neighborhoods across the city and suburbs around the metro. Not sure if we reach you? Just ask.</p>')
+             f'<p>{len(areas)} {esc(t["city"])}-area neighborhoods and communities we cover '
+             f'&mdash; is your street on the list?</p>')
     return (f'<section class="sec"><div class="wrap"><div class="sec-head">'
             f'<p class="eyebrow">Where We Work</p><h2>Serving {esc(t["city"])} &amp; nearby communities</h2>'
-            f'{blurb}</div>'
-            f'<div class="areas">{chips}<a class="areas__all" href="/service-areas/">View all areas {icon("arrow")}</a></div></div></section>')
+            f'{blurb}</div>{grid}</div></section>')
 
 def cta_band(t, heading=None):
     heading = heading or f"Need a garage door fixed in {t['city']}?"
@@ -1326,7 +1359,7 @@ def home_page(t, pages):
         mid = (services_grid(t, pages)                                  # soft
                + symptom_finder(t, pages)                               # plain
                + local_context(t, home)                                 # soft   <- city copy
-               + why_us_split(t)                                        # plain
+               + why_us_split(t, pages)                                        # plain
                + fix_most_here(t, home)                                 # soft   <- city copy
                + repair_vs_replace(t)                                   # plain
                + how_it_works(t, _home_sec(home, "how_a_call_goes"))     # soft   <- city copy
@@ -1340,7 +1373,7 @@ def home_page(t, pages):
                + cta_band(t))                                           # plain
     elif t.get("home") == "showcase":
         # contact_band() helper kept in code for reuse, but not rendered on the page
-        mid = (why_us_split(t) + services_grid(t, pages) + how_it_works(t)
+        mid = (why_us_split(t, pages) + services_grid(t, pages) + how_it_works(t)
                + areas_band(t, pages) + faq_html + cta_band(t))
     else:
         # "classic": the original 8-section stack, kept for sites that want it short
