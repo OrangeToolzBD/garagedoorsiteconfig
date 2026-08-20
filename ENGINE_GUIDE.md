@@ -795,6 +795,52 @@ one reveal pass, and zero elements left hidden. In-browser: the button appears o
 scroll, is hit-testable, calls `scrollTo({top:0, behavior:'smooth'})`, hides again at
 the top, and clears the mobile bar by 15px at 375px.
 
+### Local conditions — the duplicate-content fix
+
+`config/conditions.json` is the answer to the finding that has sat at the top of §10.5
+since the first audit: a Boone page and a Mesa page saying the same thing with the city
+name swapped. Conditions fix it at the source rather than by paraphrasing — an Arizona
+site writes about heat and dust, a Minnesota site about freeze-thaw, so the pages differ
+because the *subject* differs.
+
+**Keyed by state, deliberately.** A state-level climate claim ("Arizona summers run long
+and hot") holds for every city in that state. A city-level claim ("this town is in a Very
+High Fire Hazard Severity Zone") is not something the engine can know for 1000 cities
+without inventing it — so those live in the `cities` override block and appear only where
+someone has actually checked. Two are seeded (`punta-gorda-fl` → coastal, `boone-nc` →
+freeze); unlisted states fall back to `_default`.
+
+Seven conditions ship: heat, freeze, storm, humidity, coastal, dust, seasonal. Each
+carries a title, summary, four body paragraphs and two FAQ entries, with `{city}`/`{st}`
+substituted at build time.
+
+`condition_pages()` emits them in exactly the shape `load_content()` produces, so
+navigation, the guides index, the sitemap, internal linking and FAQPage schema pick them
+up with no special-casing. They are added with `setdefault`, so a hand-written page on
+the same topic always wins.
+
+**Measured effect.** Boone vs Mesa on the same generic guide: **96% similar**. Their
+closest-matching condition guides: **4%**. Across the ten built homepages, pairs above
+90% similarity went to **0 of 45**, the closest now 43%. Each site also gained three
+~990-word guides (202 → 232 pages).
+
+To extend: add a state to `states`, a condition to `conditions`, or a verified city to
+`cities`. No code change.
+
+### Per-site composition at scale
+
+With ~1000 sites over ten designs, about a hundred sites share each design — and a shared
+section order would make them the same page in different colours. `hb_stack()` orders the
+explanatory middle of the homepage by a hash of the domain: deterministic, so a domain
+always builds identically and diffs stay reviewable, but different from its neighbours.
+
+Anchors stay fixed because they are not decoration — services near the top because it is
+what the visitor came for, and areas → FAQ → CTA closing every page because that is the
+conversion path. Each design also pins two blocks that suit it (atlas leads with
+at-a-glance stats, hearth with a warm intro, quarry with symptoms and the safety notice),
+so the shuffle never erases a design's identity. `drop` lets ironclad and nimbus skip the
+blocks they render in their own markup.
+
 ### Verified
 
 Rebuilt and checked in-browser at 375 px and 1280 px. Across 202 pages: **0 broken

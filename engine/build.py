@@ -716,6 +716,55 @@ def call_cta(t, cls="btn btn--primary", label=None, quote_label="Get a Free Quot
     return f'<a class="{cls}" href="/request-a-quote/">{_svg_mail()}{esc(quote_label)}</a>'
 
 # ---------------------------------------------------------------- content loading
+# ---------------------------------------------------------------- local conditions
+# The engine's biggest content problem is that a Boone page and a Mesa page say the same
+# thing with the city name swapped. Conditions fix that at the source: a site in Arizona
+# writes about heat and dust, a site in Minnesota writes about freeze-thaw, and the pages
+# differ because the subject differs.
+#
+# Keyed by state, because a state-level climate claim holds for every city in it. City
+# claims ("this town is in a Very High Fire Hazard Severity Zone") are not something the
+# engine can know for 1000 cities without inventing them, so those live in the "cities"
+# override block and only appear where someone has checked.
+try:
+    CONDITIONS = json.load(open(os.path.join(CONFIG, "conditions.json"), encoding="utf-8"))
+except Exception:
+    CONDITIONS = {"conditions": {}, "states": {}, "cities": {}, "_default": []}
+
+
+def site_conditions(t):
+    """[(id, condition)] for this site: city override, else state, else the default."""
+    ids = (CONDITIONS.get("cities", {}).get(t.get("content", ""))
+           or CONDITIONS.get("states", {}).get(t.get("st", "").upper())
+           or CONDITIONS.get("_default", []))
+    defs = CONDITIONS.get("conditions", {})
+    return [(i, defs[i]) for i in ids if i in defs]
+
+
+def _fill(text, t):
+    return (text or "").replace("{city}", t["city"]).replace("{st}", t["st"])
+
+
+def condition_pages(t):
+    """Generated guide pages, one per local condition, in the same shape load_content()
+    produces -- so navigation, the guides index, sitemap and internal linking pick them
+    up with no special-casing anywhere downstream."""
+    out = {}
+    for cid, c in site_conditions(t):
+        slug = f"{cid}-and-your-garage-door"
+        url = f"/guides/{slug}/"
+        title = _fill(c.get("title", ""), t)
+        out[url] = {
+            "cat": "guide", "slug": slug, "url": url, "kind": "cond",
+            "h1": title, "title": f"{title} | {t['brand']}",
+            "meta": _fill(c.get("summary", ""), t),
+            "sections": [{"h2": "", "body": _fill(p, t)} for p in c.get("body", [])],
+            "faq": [(_fill(f.get("q", ""), t), _fill(f.get("a", ""), t)) for f in c.get("faq", [])],
+            "area_served": t["city"],
+        }
+    return out
+
+
 def load_content(t):
     """Return dict url -> page{cat,h1,title,meta,sections,faq,area_served,slug}."""
     d = os.path.join(CONTENT, t["content"])
@@ -763,6 +812,10 @@ def load_content(t):
             "meta": data.get("meta", ""), "sections": data.get("sections", []),
             "faq": faqs, "area_served": data.get("schema_facts", {}).get("areaServed", t["city"]),
         }
+    # Local-condition guides, added only where the city's own content has not already
+    # written that topic -- a hand-written page always beats a generated one.
+    for url, page in condition_pages(t).items():
+        pages.setdefault(url, page)
     return pages
 
 # ---------------------------------------------------------------- schema / head
