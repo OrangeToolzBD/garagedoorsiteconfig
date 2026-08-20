@@ -536,10 +536,16 @@ nav.main>a:hover,.nav-item>button:hover{background:var(--soft);text-decoration:n
 .hero--overlap .wrap{position:relative;margin-top:clamp(-170px,-14vw,-130px);padding-bottom:44px}
 .hero__card{background:linear-gradient(155deg,var(--pd),var(--p));border-radius:calc(var(--radius) + 6px);padding:clamp(28px,4vw,46px);max-width:660px;box-shadow:var(--shadow-lg)}
 /* -- navbar variants -- */
-.lay-nav-center .hd{position:relative;flex-wrap:wrap;justify-content:center;row-gap:4px;padding:12px 0 10px}
-.lay-nav-center .brand{margin:2px auto}
-.lay-nav-center nav.main{order:5;flex-basis:100%;justify-content:center;margin-left:0;gap:2px}
-.lay-nav-center .hd>.btn{order:4;position:absolute;right:0;top:14px}
+/* Centered nav: brand on its own row, then the links and the CTA centred together on
+   the row below. The CTA used to be `position:absolute; right:0`, which pinned it to the
+   far corner while everything else sat in the middle - it read as a stray element rather
+   than part of the bar, and left a ~255px gap between "Contact" and the button. Keeping
+   it in normal flow puts it where a visitor expects it, at the end of the menu. */
+.lay-nav-center .hd{position:relative;flex-wrap:wrap;justify-content:center;row-gap:10px;padding:14px 0 12px}
+.lay-nav-center .brand{order:1;flex-basis:100%;justify-content:center;margin:2px 0}
+.lay-nav-center nav.main{order:2;justify-content:center;margin-left:0;gap:2px}
+.lay-nav-center .hd>.btn{order:3;position:static;margin-left:12px}
+.lay-nav-center .hd .tel{order:4;margin-left:12px}
 .lay-nav-pill nav.main{background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:5px 7px;gap:2px}
 .lay-nav-pill nav.main>a,.lay-nav-pill .nav-item>button{border-radius:999px;padding:9px 14px}
 .lay-nav-pill nav.main>a:hover,.lay-nav-pill .nav-item>button:hover{background:#fff}
@@ -765,6 +771,11 @@ footer.site a.btn--ghost,footer.site a.btn--ghost:hover{color:#fff}
   .burger{display:block;order:3}
   .hd .btn{display:none}
   .hd .tel{display:none}
+  /* the centred-nav layout is a desktop treatment: below the burger breakpoint the
+     header is brand + burger on one row like every other layout, so the full-width
+     brand row is reset or the burger drops to a second line */
+  .lay-nav-center .hd{justify-content:flex-start;row-gap:0}
+  .lay-nav-center .brand{flex-basis:auto;justify-content:flex-start;margin:0 auto 0 0}
 }
 @media(max-width:720px){
   .top .wrap{gap:10px;font-size:.8rem;justify-content:center;padding:8px 18px}
