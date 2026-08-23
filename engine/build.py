@@ -1490,20 +1490,13 @@ def how_it_works(t, intro=""):
 
 # ---- showcase-variant sections (inspired by the reference design) ----
 def stats_band(t, pages=None):
-    """Credibility row. Uses the site's configured 'stats' ([number, label] pairs) when
-    present; otherwise falls back to figures counted from what this site actually
-    contains — services built, areas covered, guides written. Still never fabricates:
-    there is deliberately no population or "jobs completed" number, because neither is
-    in the data and both would have to be invented."""
+    """Config-driven credibility row. Renders only when the site defines 'stats'
+    (a list of [number, label] pairs).
+
+    The derived version -- counting services, areas and guides -- was removed: those
+    are counts of the engine's own output, not facts a visitor cares about, and the
+    band read as loose figures floating in whitespace on every design."""
     stats = t.get("stats") or []
-    if not stats and pages:
-        counted = [(len([p for p in pages.values() if p["cat"] == c]), label)
-                   for c, label in (("service", "Services offered"),
-                                    ("area", "Areas covered"),
-                                    ("guide", "Guides written"))]
-        stats = [(str(n), l) for n, l in counted if n]
-        if stats:
-            stats.append(("Diagnosis", "first, then the fix"))
     if not stats:
         return ""
     cells = "".join(f'<div class="stat"><b>{esc(str(n))}</b><span>{esc(str(l))}</span></div>' for n, l in stats)

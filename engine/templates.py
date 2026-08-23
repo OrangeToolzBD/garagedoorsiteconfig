@@ -831,9 +831,6 @@ NIM_BLOCKS = r'''
 .hb--svc,.hb--sig,.hb--faq{background:var(--sky)}
 .hb--tips,.hb--doors{background:var(--mint)}
 .hb--about,.hb--local,.hb--safety{background:#fff}
-.hb--stats{background:var(--peach);padding:0}
-.hb-statrow{padding:34px 0}
-.hb-stat b{font-family:"Baloo 2",cursive;color:var(--blue)}
 .hb-svc,.hb-guide,.hb-sig,.hb-door,.hb-tip,.hb-seg,.hb-rev{
   background:#fff;border:0;border-radius:var(--r);box-shadow:0 10px 26px rgba(44,58,73,.08)}
 .hb-svc__img img,.hb-guide__img img,.hb-door__img img{border-radius:var(--r) var(--r) 0 0}
@@ -861,7 +858,7 @@ IRON_BLOCKS = r'''
 :root{--v-card-r:0}      /* ironclad is square-cornered throughout */
 .hb-eyebrow{color:var(--brass);letter-spacing:.28em;font-size:.7rem}
 .hb h2{font-family:"Playfair Display",Georgia,serif;font-weight:700;letter-spacing:normal}
-.hb--svc,.hb--sig,.hb--faq,.hb--stats{background:var(--cream)}
+.hb--svc,.hb--sig,.hb--faq{background:var(--cream)}
 .hb--about,.hb--local,.hb--safety,.hb--tips,.hb--doors{background:var(--paper)}
 .hb-lead,.hb-prose{color:var(--muted)}
 .hb-svc,.hb-guide,.hb-sig,.hb-door,.hb-tip,.hb-seg,.hb-rev{
@@ -874,8 +871,6 @@ IRON_BLOCKS = r'''
 .hb-more{color:var(--brass);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;font-weight:600}
 .hb-step__n{background:none;color:var(--brass);border:1px solid var(--brass);border-radius:0;
   font-family:"Playfair Display",serif}
-.hb-statrow{padding:30px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
-.hb-stat b{font-family:"Playfair Display",serif;color:var(--brass)}
 .hb-areas a{border:1px solid var(--rule);border-radius:0;font-size:.9rem}
 .hb-areas a:hover{border-color:var(--brass);color:var(--brass)}
 .hb-atier h3{color:var(--brass)}
@@ -1275,27 +1270,6 @@ def hb_announce(t):
     return f'<div class="hb-announce"><div class="hb-wrap"><span>{H.esc(msg)}</span>{link}</div></div>'
 
 
-def hb_stats(t, pages):
-    """A small counted strip. Every figure is derived from what this site actually
-    contains -- services built, areas covered, guides written -- so nothing here is a
-    number someone has to stand behind. Deliberately no population or "jobs completed"
-    figure: neither is in the data, and both would be invented."""
-    e = H.esc
-    svc, areas, guides = _cat(pages, "service"), _cat(pages, "area"), _cat(pages, "guide")
-    # Labels are written for a homeowner, not for whoever built the site. "Guides
-    # written" and "Diagnosis / first, then the fix" were engine-speak -- a visitor has
-    # no idea what a "guide" is here or why a count of them matters.
-    items = []
-    if svc:
-        items.append((str(len(svc)), "services we handle"))
-    if areas:
-        items.append((str(len(areas)), f"areas around {t['city']}"))
-    items.append(("Same-day", "on most repairs"))
-    items.append(("Written", "prices before we start"))
-    cells = "".join(f'<div class="hb-stat"><b>{e(n)}</b><span>{e(l)}</span></div>' for n, l in items)
-    return f'<section class="hb hb--stats"><div class="hb-wrap"><div class="hb-statrow">{cells}</div></div></section>'
-
-
 def hb_about(t, pages, eyebrow="About"):
     """A short business introduction on the homepage. The site has an /about/ page, but
     nothing on the homepage ever said who the company is."""
@@ -1435,7 +1409,6 @@ def hb_stack(t, pages, faqs, pin=(), drop=()):
     """
     blocks = {
         "about":    lambda: hb_about(t, pages),
-        "stats":    lambda: hb_stats(t, pages),
         "symptoms": lambda: hb_symptoms(t, pages),
         "signals":  lambda: hb_signals(t),
         "steps":    lambda: hb_steps(t),
@@ -1519,17 +1492,6 @@ BLOCK_CSS = """
   flex-wrap:wrap;padding-top:9px;padding-bottom:9px;text-align:center}
 .hb-announce a{color:inherit;text-decoration:underline}
 /* stat strip */
-.hb--stats{padding:0}
-/* Ruled band with dividers. As four unbordered columns of text it read as content
-   floating in whitespace rather than as a group of figures. */
-.hb-statrow{display:grid;grid-template-columns:repeat(4,1fr);gap:0;
-  border-top:1px solid color-mix(in srgb,currentColor 14%,transparent);
-  border-bottom:1px solid color-mix(in srgb,currentColor 14%,transparent)}
-.hb-stat{display:flex;flex-direction:column;gap:3px;padding:26px 24px;
-  border-left:1px solid color-mix(in srgb,currentColor 12%,transparent)}
-.hb-stat:first-child{border-left:0;padding-left:0}
-.hb-stat b{font-size:clamp(1.5rem,3vw,2.1rem);line-height:1.05}
-.hb-stat span{font-size:.88rem;opacity:.75}
 /* about */
 .hb-prose{max-width:68ch;display:flex;flex-direction:column;gap:14px}
 /* residential / commercial */
@@ -1613,16 +1575,11 @@ BLOCK_CSS = """
 
 @media(max-width:980px){
   .hb-svcs,.hb-steps,.hb-guides,.hb-segs{grid-template-columns:1fr}
-  .hb-sigs,.hb-areas,.hb-statrow{grid-template-columns:1fr 1fr}
-  .hb-stat:nth-child(odd){border-left:0;padding-left:0}
-  .hb-stat:nth-child(n+3){border-top:1px solid color-mix(in srgb,currentColor 12%,transparent)}
+  .hb-sigs,.hb-areas{grid-template-columns:1fr 1fr}
 }
 @media(max-width:620px){
   .hb{padding:52px 0}.hb-wrap{padding:0 18px}
   .hb-sigs,.hb-areas{grid-template-columns:1fr}
-  .hb-statrow{grid-template-columns:1fr}
-  .hb-stat{border-left:0;padding-left:0;padding-top:18px;padding-bottom:18px}
-  .hb-stat+.hb-stat{border-top:1px solid color-mix(in srgb,currentColor 12%,transparent)}
   .hb-seg{padding:24px}
 }
 """
@@ -1780,7 +1737,7 @@ def forge_home(t, pages):
               f'<div class="fg-acts">{call}<a class="fg-btn fg-btn--ghost" href="/services/">See what we fix</a></div>'
               f'</div></section>'
             + f'<div class="fg-rail">{rail}</div>'
-            + hb_stack(t, pages, faqs, pin=("stats", "emergency"))
+            + hb_stack(t, pages, faqs, pin=("emergency", "signals"))
             + _chrome_footer(t, pages) + "</body></html>")
 
 
@@ -1950,7 +1907,7 @@ def beacon_home(t, pages):
               f'<a class="bc-btn bc-btn--alt" href="/request-a-quote/">Get a free quote</a></div></div></section>'
             + f'<div class="bc-band"><div><span>Same-day on most repairs</span>'
               f'<span>Written prices</span><span>Springs · Openers · Panels · New doors</span></div></div>'
-            + hb_stack(t, pages, faqs, pin=("symptoms", "stats"))
+            + hb_stack(t, pages, faqs, pin=("symptoms", "signals"))
             + _chrome_footer(t, pages) + "</body></html>")
 
 
@@ -2038,7 +1995,7 @@ def atlas_home(t, pages):
               f'<p>{e(lead)}</p><div class="at-acts">{call}'
               f'<a class="at-btn at-btn--alt" href="/services/">Browse services</a></div></div>'
               f'<div class="at-spec"><h2>At a glance</h2><dl>{spec}</dl></div></div></section>'
-            + hb_stack(t, pages, faqs, pin=("stats", "rvr"))
+            + hb_stack(t, pages, faqs, pin=("rvr", "signals"))
             + _chrome_footer(t, pages) + "</body></html>")
 
 
@@ -2298,7 +2255,7 @@ def verdant_home(t, pages):
             + f'<div class="vd-band"><img src="{PHOTOS}{_hero(t)}" alt="{e(t["city"])} garage door" '
               f'width="1600" height="900" fetchpriority="high" decoding="async"></div>'
             + f'<div class="vd-pills">{pills}</div>'
-            + hb_stack(t, pages, faqs, pin=("doors", "stats"))
+            + hb_stack(t, pages, faqs, pin=("doors", "signals"))
             + _chrome_footer(t, pages) + "</body></html>")
 
 
