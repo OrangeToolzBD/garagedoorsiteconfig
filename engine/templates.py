@@ -62,7 +62,10 @@ def _quote_block(t, is_quote):
     form = H.quote_form(t)
     # padding-block only -- a `padding` shorthand here would wipe out each design's
     # own .wrap gutter and push the form flush against the viewport edges.
-    return f'<div class="wrap" style="padding-block:36px 8px">{form}</div>' if form else ""
+    # max-width: these designs have no side card next to the form, so without a cap it
+    # stretches the full 1180px container and the inputs read as a wall.
+    return (f'<div class="wrap" style="padding-block:36px 8px">'
+            f'<div style="max-width:860px">{form}</div></div>') if form else ""
 
 
 def _inner(t, p):
@@ -574,7 +577,7 @@ def iron_inner(t, pages, p):
              f'{_tel(t, cls="tel serif")}'
              f'<a class="pill pill--brass" href="/request-a-quote/">Request an Estimate</a></aside>')
     schemas = _inner_schemas(t, p, h1, label, parent)
-    return (_head(t, H.seo_title(p["title"] or f"{h1} | {t['brand']}"), p["meta"] or "", p["url"], schemas, IRON_FONTS, og=img)
+    return (_head(t, H.page_title(t, p, h1), p["meta"] or "", p["url"], schemas, IRON_FONTS, og=img)
             + _iron_header(t, pages)
             + f'<section class="phero"><div class="wrap"><div class="crumb"><a href="/">Home</a> / <a href="{parent}">{label}</a> / {e(h1)}</div><h1 class="serif">{e(h1)}</h1></div></section>'
             + f'<div class="wrap"><div class="article"><div class="body"><img src="{PHOTOS}{img}" alt="{e(h1)}" width="1200" height="900" loading="lazy" decoding="async">{body}</div>{aside}</div></div>'
@@ -601,7 +604,7 @@ def iron_trust(t, pages, url, h1, blocks, is_quote=False):
              f'{_tel(t, cls="tel serif")}'
              f'<a class="pill pill--brass" href="/request-a-quote/">Request a Visit</a></aside>')
     schemas = [H.org_schema(t), H.breadcrumb_schema(t, [("Home", "/"), (h1, url)])]
-    return (_head(t, H.seo_title(f"{h1} | {t['brand']}"), f"{h1} — {t['brand']}, {t['city']}, {t['st']}.", url, schemas, IRON_FONTS)
+    return (_head(t, H.seo_title(f"{h1} | {t['brand']}"), H.trust_desc(t, h1, url), url, schemas, IRON_FONTS)
             + _iron_header(t, pages)
             + f'<section class="phero"><div class="wrap"><div class="crumb"><a href="/">Home</a> / {e(h1)}</div><h1 class="serif">{e(h1)}</h1></div></section>'
             + _quote_block(t, is_quote)
@@ -783,7 +786,7 @@ def nim_inner(t, pages, p):
     img = _inner(t, p)
     body = _inner_parts(t, p)
     schemas = _inner_schemas(t, p, h1, label, parent)
-    return (_head(t, H.seo_title(p["title"] or f"{h1} | {t['brand']}"), p["meta"] or "", p["url"], schemas, NIM_FONTS, og=img)
+    return (_head(t, H.page_title(t, p, h1), p["meta"] or "", p["url"], schemas, NIM_FONTS, og=img)
             + _nim_header(t, pages)
             + f'<section class="phero"><div class="crumb"><a href="/">Home</a> · <a href="{parent}">{label}</a> · {e(h1)}</div><h1>{e(h1)}</h1></section>'
             + f'<div class="article"><div class="body"><img src="{PHOTOS}{img}" alt="{e(h1)}" width="1200" height="900" loading="lazy" decoding="async">{body}</div></div>'
@@ -805,7 +808,7 @@ def nim_trust(t, pages, url, h1, blocks, is_quote=False):
     e = H.esc
     body = "".join(f'<h2>{e(hh)}</h2><p>{e(bb)}</p>' for hh, bb in blocks)
     schemas = [H.org_schema(t), H.breadcrumb_schema(t, [("Home", "/"), (h1, url)])]
-    return (_head(t, H.seo_title(f"{h1} | {t['brand']}"), f"{h1} — {t['brand']}, {t['city']}, {t['st']}.", url, schemas, NIM_FONTS)
+    return (_head(t, H.seo_title(f"{h1} | {t['brand']}"), H.trust_desc(t, h1, url), url, schemas, NIM_FONTS)
             + _nim_header(t, pages)
             + f'<section class="phero"><div class="crumb"><a href="/">Home</a> · {e(h1)}</div><h1>{e(h1)}</h1></section>'
             + _quote_block(t, is_quote)
@@ -923,7 +926,7 @@ def _gen_inner(fonts, cta="Request a Quote"):
         h1 = p["h1"] or H.area_label(p)
         img = _inner(t, p)
         schemas = _inner_schemas(t, p, h1, label, parent)
-        return (_head(t, H.seo_title(p["title"] or f"{h1} | {t['brand']}"), p["meta"] or "",
+        return (_head(t, H.page_title(t, p, h1), p["meta"] or "",
                       p["url"], schemas, fonts, og=img)
                 + _chrome_header(t, pages, cta)
                 + f'<section class="pg-hero"><div class="pg-wrap">'
@@ -963,7 +966,7 @@ def _gen_trust(fonts, cta="Request a Quote"):
         body = "".join(f'<h2>{e(hh)}</h2><p>{e(bb)}</p>' for hh, bb in blocks)
         schemas = [H.org_schema(t), H.breadcrumb_schema(t, [("Home", "/"), (h1, url)])]
         return (_head(t, H.seo_title(f"{h1} | {t['brand']}"),
-                      f"{h1} - {t['brand']}, {t['city']}, {t['st']}.", url, schemas, fonts)
+                      H.trust_desc(t, h1, url), url, schemas, fonts)
                 + _chrome_header(t, pages, cta)
                 + f'<section class="pg-hero"><div class="pg-wrap">'
                   f'{_pg_crumb([("Home", "/"), (h1, url)])}<h1>{e(h1)}</h1></div></section>'

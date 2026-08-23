@@ -661,9 +661,65 @@ def faq_accordion(faqs):
         f'<div class="a"><p>{esc(a)}</p></div></details>'
         for i, (q, a) in enumerate(faqs))
 
+# words a trimmed title should never end on
+_TITLE_TAIL = {"and", "or", "the", "a", "an", "of", "for", "in", "on", "at", "to", "with",
+               "from", "between", "by", "&", "your", "that", "this", "into", "under"}
+
+
+def trust_desc(t, h1, url):
+    """Meta description for the generated about / contact / quote pages.
+
+    These were "{h1} - {brand}, {city}, {st}." -- 54-69 characters, well under the ~70
+    minimum a search snippet wants, and mostly the brand name twice. Each page now
+    describes what is actually on it."""
+    b, c, st = t["brand"], t["city"], t["st"]
+    u = url.strip("/")
+    if u == "about":
+        return (f"{b} is a {c}, {st} garage door team handling repair, spring and opener "
+                f"service, and new-door installation. How we diagnose, price and stand behind it.")
+    if u == "contact":
+        return (f"Get in touch with {b} for garage door repair, service or a new-door quote "
+                f"in {c}, {st}. Same-day service on most repairs across the {c} metro.")
+    if u == "request-a-quote":
+        return (f"Tell us what your garage door is doing and get a written price from {b} "
+                f"- no vague ranges. Serving {c}, {st} and the surrounding metro.")
+    return f"{h1} - {b}, {c}, {st}."
+
+
+def page_title(t, p, h1):
+    """<title> for a content page, always ending in THIS site's brand.
+
+    The content JSON carries its own `title`, usually with a brand suffix baked in --
+    and content folders are shared between domains (content/dallas-tx serves two), so
+    trusting that suffix put a different company's name on 17 pages of
+    dallasdoorpros.com. Keep the descriptive half of the JSON title, append the brand
+    from config."""
+    raw = (p.get("title") or "").strip() or f"{h1} | {t['brand']}"
+    head = raw.split(" | ")[0].strip() or h1
+    return seo_title(f"{head} | {t['brand']}")
+
+
 def seo_title(raw):
+    """Trim a title to ~60 chars without making it look broken.
+
+    The old version cut at 57 characters and appended an ellipsis, which sliced words
+    in half -- "...Homes Built Between 1973 an…", "...Everglade Park, D…". A title
+    ending mid-word reads as a bug in a browser tab and in search results. Now the
+    brand suffix is dropped first (it is the least informative part), and any further
+    trim happens on a word boundary with no ellipsis: a clean shorter title beats a
+    truncated one."""
     raw = (raw or "").strip()
-    return raw if len(raw) <= 60 else (raw.split(" | ")[0].strip()[:57].rstrip() + "…")
+    if len(raw) <= 60:
+        return raw
+    head = raw.split(" | ")[0].strip()
+    if len(head) <= 60:
+        return head
+    cut = head[:60].rsplit(" ", 1)[0].rstrip(" ,-–—/&")
+    # a title should not end on a dangling connective ("... Built Between 1973 and")
+    words = cut.split()
+    while len(words) > 3 and words[-1].lower() in _TITLE_TAIL:
+        words.pop()
+    return " ".join(words).rstrip(" ,-–—/&") or head[:60]
 
 def home_title(t, pages):
     """Homepage <title>, guaranteed not to collide with a service page's.
@@ -964,9 +1020,33 @@ def condition_pages(t):
     return out
 
 
+def _foreign_brands(t):
+    """Brands belonging to OTHER sites that share this site's content folder.
+
+    The engine deliberately allows two domains to build from one content folder, but
+    that content was authored for one of them and hard-codes its brand in titles and
+    meta descriptions. Unfixed, dallasdoorpros.com shipped 17 titles and 9 descriptions
+    naming "Dallas Garage Door" -- a different company. Only brands from sites sharing
+    this exact folder are substituted, so ordinary phrases like "Lakewood, Dallas" are
+    never touched."""
+    mine = t.get("brand", "")
+    out = {s["brand"] for s in SITES.values()
+           if s.get("content") == t.get("content") and s.get("brand") and s["brand"] != mine}
+    # longest first, so "Dallas Garage Door Co" is replaced before "Dallas Garage Door"
+    return sorted(out, key=len, reverse=True)
+
+
+def _debrand(text, foreign, mine):
+    for f in foreign:
+        if f and f in text:
+            text = text.replace(f, mine)
+    return text
+
+
 def load_content(t):
     """Return dict url -> page{cat,h1,title,meta,sections,faq,area_served,slug}."""
     d = os.path.join(CONTENT, t["content"])
+    foreign = _foreign_brands(t)
     city_slug = slugify(t["city"])
     suffix = f"-{city_slug}-{t['st'].lower()}"
     pages = {}
@@ -1007,8 +1087,11 @@ def load_content(t):
             # it lets the areas section split into two real tiers instead of one flat
             # list -- the distinction is in the content, not invented at render time.
             "kind": ptype,
-            "h1": data.get("h1", ""), "title": data.get("title", ""),
-            "meta": data.get("meta", ""), "sections": data.get("sections", []),
+            "h1": _debrand(data.get("h1", ""), foreign, t["brand"]),
+            "title": _debrand(data.get("title", ""), foreign, t["brand"]),
+            "meta": _debrand(data.get("meta", ""), foreign, t["brand"]),
+            "sections": [{**sec, "body": _debrand(sec.get("body", ""), foreign, t["brand"])}
+                         for sec in data.get("sections", [])],
             "faq": faqs, "area_served": data.get("schema_facts", {}).get("areaServed", t["city"]),
         }
     # Local-condition guides, added only where the city's own content has not already
@@ -1657,7 +1740,7 @@ def inner_page(t, p, pages):
     body = (f'<section class="page-hero"><div class="wrap">{crumb}<h1>{esc(h1)}</h1></div></section>'
             f'<div class="wrap"><div class="article"><div class="body">{"".join(parts)}</div>{aside}</div></div>'
             + cta_band(t, f"Book garage door service in {t['city']}"))
-    title = seo_title(p["title"] or f"{h1} | {t['brand']}")
+    title = page_title(t, p, h1)
     trail = [("Home", "/"), (label, parent), (h1, p["url"])]
     schemas = [org_schema(t), breadcrumb_schema(t, trail)]
     if p["cat"] == "service":
@@ -1931,7 +2014,7 @@ def trust_page(t, pages, url, h1, blocks, is_quote=False):
             f'<div class="wrap"><div class="article"><div class="body">{parts}</div>{aside}</div></div>'
             + cta_band(t))
     schemas = [org_schema(t), breadcrumb_schema(t, [("Home", "/"), (h1, url)])]
-    return (head_html(t, seo_title(f"{h1} | {t['brand']}"), f"{h1} — {t['brand']}, {t['city']}, {t['st']}.", url, schemas,
+    return (head_html(t, seo_title(f"{h1} | {t['brand']}"), trust_desc(t, h1, url), url, schemas,
                        og_image=t.get("hero_img") or HERO_IMG)
             + header(t, pages) + body + footer(t, pages) + "</body></html>")
 
@@ -2038,15 +2121,15 @@ def build():
         if any(p["cat"] == "service" for p in pages.values()):
             write(out, "/services/", R["index"](t, pages, "service", "/services/",
                   f"Garage Door Services in {t['city']}", "What We Do",
-                  f"Repair, installation and service for garage doors across {t['city']} and nearby."), t)
+                  f"Garage door repair, spring and opener service, and new-door installation across {t['city']} and the surrounding metro - with written pricing before any work starts."), t)
         if any(p["cat"] == "area" for p in pages.values()):
             write(out, "/service-areas/", R["index"](t, pages, "area", "/service-areas/",
                   f"Service Areas Around {t['city']}", "Where We Work",
-                  f"Neighborhoods and suburbs we cover across the {t['city']} metro."), t)
+                  f"Every {t['city']}-area neighborhood and nearby community we cover for garage door repair, spring and opener service, and new-door installation."), t)
         if any(p["cat"] == "guide" for p in pages.values()):
             write(out, "/guides/", R["index"](t, pages, "guide", "/guides/",
                   "Garage Door Guides", "Good to Know",
-                  "Plain-English answers about springs, openers, older doors and what a repair really involves."), t)
+                  "Plain-English answers about springs, openers, noises, older doors, local conditions and what a garage door repair really involves."), t)
         # trust pages
         write(out, "/about/", R["trust"](t, pages, "/about/", f"About {t['brand']}", [
             ("A local garage door crew",
