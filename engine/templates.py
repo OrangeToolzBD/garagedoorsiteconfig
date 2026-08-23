@@ -1282,14 +1282,16 @@ def hb_stats(t, pages):
     figure: neither is in the data, and both would be invented."""
     e = H.esc
     svc, areas, guides = _cat(pages, "service"), _cat(pages, "area"), _cat(pages, "guide")
+    # Labels are written for a homeowner, not for whoever built the site. "Guides
+    # written" and "Diagnosis / first, then the fix" were engine-speak -- a visitor has
+    # no idea what a "guide" is here or why a count of them matters.
     items = []
     if svc:
-        items.append((str(len(svc)), "Services offered"))
+        items.append((str(len(svc)), "services we handle"))
     if areas:
-        items.append((str(len(areas)), "Areas covered"))
-    if guides:
-        items.append((str(len(guides)), "Guides written"))
-    items.append(("Diagnosis", "first, then the fix"))
+        items.append((str(len(areas)), f"areas around {t['city']}"))
+    items.append(("Same-day", "on most repairs"))
+    items.append(("Written", "prices before we start"))
     cells = "".join(f'<div class="hb-stat"><b>{e(n)}</b><span>{e(l)}</span></div>' for n, l in items)
     return f'<section class="hb hb--stats"><div class="hb-wrap"><div class="hb-statrow">{cells}</div></div></section>'
 
@@ -1560,7 +1562,7 @@ BLOCK_CSS = """
 .hb-syms{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .hb-sym{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;
   text-decoration:none;color:inherit;font-weight:600}
-.hb-sym::after{content:"92";opacity:.6}
+.hb-sym::after{content:"→";opacity:.6}
 .hb-rvr{display:grid;grid-template-columns:1fr 1fr;gap:22px}
 .hb-rvr__c{padding:28px}
 .hb-rvr__c h3{margin:0 0 14px;font-size:1.1rem}
@@ -1652,7 +1654,7 @@ def _mk(css_str, home, inner, index, trust, blocks=False):
     base = CHROME_CSS + (PAGE_CSS + BLOCK_CSS if blocks else "")
     return {"css": (lambda cs: (lambda t: base + _paint(cs, t) + A11Y_CSS + H.QFORM_CSS
                                           + H.actionbar_css(t) + H.fx_css(t)
-                                          + H.VARIANT_CSS + H.type_css(t)))(css_str),
+                                          + H.VARIANT_CSS + H.type_css(t) + H.footer_css(t)))(css_str),
             "home": home,
             "inner": (lambda fn: (lambda t, p, pages: fn(t, pages, p)))(inner),
             "index": index, "trust": trust}

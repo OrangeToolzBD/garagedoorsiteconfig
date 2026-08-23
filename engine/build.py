@@ -13,6 +13,7 @@ Page types (by filename): <city>-home / -svc- / -nb- / -sub- / -top-.
   top  -> /guides/<slug>/          (topic guides)
 """
 import os, re, json, html, shutil, hashlib
+from engine import _rgb, _hex, _mix, _lum, _contrast
 from datetime import date
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -876,6 +877,46 @@ def variant_classes(t):
     """The <body> class list. A design reads these purely through CSS."""
     r = recipe(t)
     return " ".join(f"v-{k}-{r[k]}" for k in VARIANT_AXES)
+
+
+# The footer background of each design. atlas and verdant use the site's own dark
+# primary, so they resolve per site. Needed because a colour's readability depends on
+# what it sits on, and the brand accent is generated for contrast against WHITE.
+FOOTER_BG = {"forge": "#0e1116", "beacon": "#15181d", "quarry": "#0f0f10",
+             "ironclad": "#171512", "garage": "#0e141b", "nimbus": "#eef4fb",
+             "coastline": "#f7f8fa", "hearth": "#f1e7da",
+             "atlas": None, "verdant": None}
+
+
+def _readable_on(fg_hex, bg_hex, target=4.5):
+    """Nudge fg toward white or black until it clears `target` against bg.
+
+    Footer headings were rendered in the raw brand accent, which is chosen to read on
+    white. On a dark footer that produced 1.31:1 (purple on olive) -- 8 of 16 sites were
+    below AA. Moving the colour rather than replacing it keeps the brand hue."""
+    fg, bg = _rgb(fg_hex), _rgb(bg_hex)
+    if _contrast(fg, bg) >= target:
+        return _hex(fg)
+    # go toward whichever end the background is not
+    toward = (255, 255, 255) if _lum(bg) < 0.5 else (0, 0, 0)
+    best = fg
+    for i in range(1, 21):
+        cand = _mix(fg, toward, i / 20)
+        if _contrast(cand, bg) >= target:
+            return _hex(cand)
+        best = cand
+    return _hex(best)
+
+
+def footer_css(t):
+    """Footer heading colour, corrected for the background it actually sits on."""
+    design = site_design(t)
+    bg = FOOTER_BG.get(design)
+    if bg is None:                       # atlas / verdant use the site's dark primary
+        bg = t.get("pd") or "#12213a"
+    acc = _readable_on(t.get("accent", "#c2703a"), bg)
+    return (f":root{{--v-acc-foot:{acc}}}\n"
+            ".tc-foot .tc-fcol h3,.gfooter .gf-cols h3{color:var(--v-acc-foot)}\n")
 
 
 def type_css(t):
@@ -1826,6 +1867,14 @@ html{scroll-behavior:smooth;scroll-padding-top:96px}
   html.anim .fx-r{opacity:0;transform:translateY(22px);
     transition:opacity .6s ease,transform .7s cubic-bezier(.2,.75,.25,1)}
   html.anim .fx-r.in{opacity:1;transform:none}
+  /* Page-load entrance. Scroll-reveal only ever animated what was BELOW the fold, so
+     the first screen -- the part everyone sees -- simply appeared. The header and the
+     first section now animate in on load. Gated on html.anim like the reveal, so with
+     JS off nothing is left hidden. */
+  @keyframes fx-bar-in{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+  @keyframes fx-lead-in{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+  html.anim .tc-bar,html.anim header.site{animation:fx-bar-in .45s ease both}
+  html.anim main>*:first-child{animation:fx-lead-in .65s cubic-bezier(.2,.75,.25,1) .06s both}
 }
 .totop{position:fixed;right:18px;bottom:18px;z-index:92;width:46px;height:46px;
   border:0;border-radius:50%;cursor:pointer;display:grid;place-items:center;
@@ -2054,7 +2103,7 @@ def trust_page(t, pages, url, h1, blocks, is_quote=False):
 # The default "garage" design is the module functions above. Alternate full designs
 # (ironclad / volt / nimbus) live in templates.py and expose the same interface.
 GARAGE = {"css": lambda t: css(t) + GD_CSS + QFORM_CSS + actionbar_css(t) + fx_css(t)
-                           + VARIANT_CSS + type_css(t), "navjs": NAVJS,
+                           + VARIANT_CSS + type_css(t) + footer_css(t), "navjs": NAVJS,
           "home": lambda t, pages: home_page(t, pages),
           "inner": lambda t, p, pages: inner_page(t, p, pages),
           "index": lambda t, pages, cat, url, h1, eb, bl: index_page(t, pages, cat, url, h1, eb, bl),
