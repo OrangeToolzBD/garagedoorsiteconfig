@@ -1520,8 +1520,14 @@ BLOCK_CSS = """
 .hb-announce a{color:inherit;text-decoration:underline}
 /* stat strip */
 .hb--stats{padding:0}
-.hb-statrow{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;padding:26px 0}
-.hb-stat{display:flex;flex-direction:column;gap:2px}
+/* Ruled band with dividers. As four unbordered columns of text it read as content
+   floating in whitespace rather than as a group of figures. */
+.hb-statrow{display:grid;grid-template-columns:repeat(4,1fr);gap:0;
+  border-top:1px solid color-mix(in srgb,currentColor 14%,transparent);
+  border-bottom:1px solid color-mix(in srgb,currentColor 14%,transparent)}
+.hb-stat{display:flex;flex-direction:column;gap:3px;padding:26px 24px;
+  border-left:1px solid color-mix(in srgb,currentColor 12%,transparent)}
+.hb-stat:first-child{border-left:0;padding-left:0}
 .hb-stat b{font-size:clamp(1.5rem,3vw,2.1rem);line-height:1.05}
 .hb-stat span{font-size:.88rem;opacity:.75}
 /* about */
@@ -1560,8 +1566,19 @@ BLOCK_CSS = """
 @media(max-width:620px){.hb-shots{grid-template-columns:1fr}.hb-shot img{height:200px}}
 /* ported expanded-homepage blocks */
 .hb-syms{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.hb-sym{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;
-  text-decoration:none;color:inherit;font-weight:600}
+/* These carry no design-level theming (no design styles .hb-sym), so the base has to
+   make them legible on its own. Without a border they rendered as bare text with a
+   stray arrow and read as unstyled. color-mix on currentColor keeps that working on a
+   light or a dark section without knowing the palette. */
+.hb-sym{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 16px;
+  text-decoration:none;color:inherit;font-weight:600;line-height:1.3;
+  border:1px solid color-mix(in srgb,currentColor 16%,transparent);
+  border-radius:var(--v-card-r,10px);
+  background:color-mix(in srgb,currentColor 4%,transparent);
+  transition:border-color .2s,background .2s,transform .2s}
+.hb-sym:hover{border-color:color-mix(in srgb,currentColor 42%,transparent);
+  background:color-mix(in srgb,currentColor 9%,transparent);transform:translateY(-2px)}
+.hb-sym::after{flex:0 0 auto}
 .hb-sym::after{content:"→";opacity:.6}
 .hb-rvr{display:grid;grid-template-columns:1fr 1fr;gap:22px}
 .hb-rvr__c{padding:28px}
@@ -1597,11 +1614,15 @@ BLOCK_CSS = """
 @media(max-width:980px){
   .hb-svcs,.hb-steps,.hb-guides,.hb-segs{grid-template-columns:1fr}
   .hb-sigs,.hb-areas,.hb-statrow{grid-template-columns:1fr 1fr}
+  .hb-stat:nth-child(odd){border-left:0;padding-left:0}
+  .hb-stat:nth-child(n+3){border-top:1px solid color-mix(in srgb,currentColor 12%,transparent)}
 }
 @media(max-width:620px){
   .hb{padding:52px 0}.hb-wrap{padding:0 18px}
   .hb-sigs,.hb-areas{grid-template-columns:1fr}
-  .hb-statrow{gap:14px}
+  .hb-statrow{grid-template-columns:1fr}
+  .hb-stat{border-left:0;padding-left:0;padding-top:18px;padding-bottom:18px}
+  .hb-stat+.hb-stat{border-top:1px solid color-mix(in srgb,currentColor 12%,transparent)}
   .hb-seg{padding:24px}
 }
 """
