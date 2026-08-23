@@ -1,0 +1,20 @@
+{
+ "title": "Garage Door Service in West End - Renton, WA",
+ "meta": "Garage door repair and installation in West End, Renton. Same-day service, local techs.",
+ "h1": "Garage Door Service in West End",
+ "sections": [
+  {
+   "h2": "serving_the_neighborhood",
+   "body": "We cover West End and the rest of Renton for garage door repair, spring and opener service, and new-door installation. Same-day service on most repairs, with a written price before we start."
+  }
+ ],
+ "faq": [
+  {
+   "q": "Do you serve West End?",
+   "a": "Yes - West End is inside our regular Renton service area."
+  }
+ ],
+ "schema_facts": {
+  "areaServed": "West End, Renton, WA"
+ }
+}
