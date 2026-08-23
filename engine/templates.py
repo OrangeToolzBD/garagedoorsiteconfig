@@ -1454,6 +1454,13 @@ BLOCK_CSS = """
   border-radius:50%;font-weight:800;margin-bottom:14px}
 .hb-step h3{margin:0 0 8px;font-size:1.12rem}.hb-step p{margin:0;opacity:.8}
 .hb-sigs{display:grid;grid-template-columns:repeat(4,1fr);gap:24px}
+/* Every element the card axis can turn into a card MUST carry its own padding. The
+   axis adds a background, a border and a shadow; a card whose text touches its own
+   edge reads as broken. .hb-svc / .hb-guide / .hb-door delegate this to their inner
+   __txt wrapper so the image can sit flush; .hb-tip and .hb-seg declare it directly.
+   .hb-sig had no base rule at all, so on quarry (card=raised, which paints a
+   background) the copy sat against the border. */
+.hb-sig{padding:24px}
 .hb-sig h3{margin:0 0 8px;font-size:1.05rem}.hb-sig p{margin:0;opacity:.8;font-size:.94rem}
 .hb-areas{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:22px}
 .hb-areas a{padding:12px 14px;text-decoration:none;color:inherit}
