@@ -258,6 +258,20 @@ def select_photos(t, pages, photos_dir):
             to_copy[dest] = os.path.join(fallback_pool, dest)
         inner_imgs[url] = dest
 
+    # Gallery: 6 shots of real work, offset from the service-card picks so the gallery
+    # is not the same six photos the cards already showed.
+    gallery = []
+    gdirs = ["GD REPAIR", "GD SERVICE", "GD INSTALLATION", "GD MAINTENNANCE"]
+    for i in range(6):
+        dirname = gdirs[i % len(gdirs)]
+        gfiles = _brand_list(dirname)
+        if not gfiles:
+            continue
+        idx = (_stable_idx(t["domain"] + "gal", len(gfiles)) + i * 7) % len(gfiles)
+        dest = f"gal-{i}.webp"
+        to_copy[dest] = os.path.join(BRAND_PHOTOS, dirname, gfiles[idx])
+        gallery.append(dest)
+
     # Expanded homepage only: 6 more GD INSTALLATION shots for the door-styles grid
     # plus one GD MAINTENNANCE shot for the local-context block. Offset from the
     # service-card picks so the two grids never land on the same photo.
@@ -285,7 +299,7 @@ def select_photos(t, pages, photos_dir):
         except FileNotFoundError:
             pass
 
-    return hero_fn, card_imgs, inner_imgs, door_imgs, ctx_img
+    return hero_fn, card_imgs, inner_imgs, door_imgs, ctx_img, gallery
 
 # garage-door-specific CSS (appended after the shared design system; leaves porta-potty untouched)
 GD_CSS = """
@@ -802,7 +816,7 @@ TYPE_PAIRS = [
 ]
 
 VARIANT_AXES = {
-    "nav":   ["left", "center", "split", "wide"],      # where the nav sits in the bar
+    "nav":   ["left", "center", "split", "wide", "condense"],  # nav placement / behaviour
     "hero":  ["tall", "compact", "left", "center"],    # hero height and alignment
     "btn":   ["pill", "round", "sharp", "wide"],       # button shape
     "card":  ["raised", "flat", "outline", "edge"],    # card treatment
@@ -817,7 +831,8 @@ VARIANT_AXES = {
 # Blocks a site may go without. The rest are load-bearing (services, areas, FAQ, CTA)
 # and are never dropped: cutting them would trade page variety for lost conversions and
 # thinner pages, which is the opposite of the point.
-DROPPABLE = ["segments", "tips", "safety", "emergency", "rvr", "doors", "symptoms", "signals"]
+DROPPABLE = ["segments", "tips", "safety", "emergency", "rvr", "doors", "symptoms",
+             "signals", "gallery"]
 
 
 def _pick(seed, key, options):
@@ -888,6 +903,19 @@ VARIANT_CSS = """
 .v-nav-split .tc-acts{margin-left:0}
 .v-nav-wide .tc-inner{max-width:none;padding-left:40px;padding-right:40px}
 .v-nav-wide .tc-nav{gap:14px}
+/* condense: a taller bar that shrinks once the page is scrolled. The class is added by
+   CHROME_JS rather than by CSS alone, because there is no scroll-position selector. */
+.v-nav-condense .tc-inner{padding-top:20px;padding-bottom:20px;transition:padding .2s}
+.v-nav-condense .tc-brand--lockup img,.v-nav-condense .tc-brand__mark img,
+.v-nav-condense .tc-brand__mark svg{transition:height .2s}
+.v-nav-condense .tc-bar.is-stuck .tc-inner{padding-top:8px;padding-bottom:8px}
+.v-nav-condense .tc-bar.is-stuck .tc-brand--lockup img,
+.v-nav-condense .tc-bar.is-stuck .tc-brand__mark img,
+.v-nav-condense .tc-bar.is-stuck .tc-brand__mark svg{height:34px}
+.v-nav-condense .tc-bar.is-stuck{box-shadow:0 6px 18px rgba(15,23,42,.10)}
+@media (prefers-reduced-motion:reduce){
+  .v-nav-condense .tc-inner,.v-nav-condense .tc-brand--lockup img{transition:none}
+}
 /* ---- hero rhythm ---- */
 .v-hero-tall .fg-hero,.v-hero-tall .qy-slab img{min-height:84vh}
 .v-hero-tall .cs-hero,.v-hero-tall .at-in,.v-hero-tall .vd-hero,.v-hero-tall .ht-hero{padding-top:92px;padding-bottom:64px}
@@ -2113,7 +2141,7 @@ def build():
         # the default "garage" design (falls back to the pool above only where
         # brand/photos has no match).
         (t["hero_img"], t["card_imgs"], t["inner_imgs"],
-         t["door_imgs"], t["ctx_img"]) = select_photos(t, pages, photos)
+         t["door_imgs"], t["ctx_img"], t["gallery_imgs"]) = select_photos(t, pages, photos)
         # inner content pages
         for url, p in pages.items():
             if p["cat"] == "home":

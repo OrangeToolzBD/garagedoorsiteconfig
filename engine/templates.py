@@ -296,6 +296,12 @@ def _chrome_footer(t, pages, blurb=None, tagline=None):
 CHROME_JS = """<script>(function(){
  var BP=window.matchMedia('(max-width:__BP__px)');
  function exp(el,v){if(el)el.setAttribute('aria-expanded',v?'true':'false')}
+ // condensing header: mark the bar once the page has scrolled (no CSS selector for it)
+ var bar=document.querySelector('.tc-bar');
+ if(bar&&document.body.className.indexOf('v-nav-condense')>-1){
+   var onScroll=function(){bar.classList.toggle('is-stuck',(window.pageYOffset||0)>60)};
+   window.addEventListener('scroll',onScroll,{passive:true});onScroll();
+ }
  var burger=document.querySelector('.tc-burger'),panel=document.getElementById('tc-menu');
  if(burger&&panel)burger.addEventListener('click',function(){exp(burger,panel.classList.toggle('open'))});
  // desktop dropdowns: hover for pointers, click for touch and keyboard. The mockups
@@ -1239,6 +1245,23 @@ def hb_reviews(t, eyebrow="In their words"):
             f'{rating}<div class="hb-revs">{cells}</div></div></section>')
 
 
+def hb_gallery(t, eyebrow="Recent work"):
+    """A photo grid of real jobs. Uses the dedicated gallery set select_photos() picks,
+    which is offset from the service-card shots so this is not the same six images
+    again. Renders nothing if the photo library has no match for this site."""
+    e = H.esc
+    imgs = t.get("gallery_imgs") or []
+    if len(imgs) < 4:
+        return ""
+    cells = "".join(
+        f'<figure class="hb-shot"><img src="{PHOTOS}{fn}" alt="Garage door work in {e(t["city"])}" '
+        f'width="800" height="600" loading="lazy" decoding="async"></figure>' for fn in imgs)
+    return (f'<section class="hb hb--gallery"><div class="hb-wrap">'
+            f'<p class="hb-eyebrow">{e(eyebrow)}</p>'
+            f'<h2>Doors we have worked on around {e(t["city"])}</h2>'
+            f'<div class="hb-shots">{cells}</div></div></section>')
+
+
 def hb_announce(t):
     """Thin bar above the header. Renders only when `announce` is configured for the
     site (or in defaults) -- an empty promo bar is worse than none, and inventing a
@@ -1350,8 +1373,19 @@ def hb_faq(faqs, eyebrow="Questions"):
             f'<div class="hb-faqs">{items}</div></div></section>')
 
 
-def hb_cta(t, heading=None, cta="Request a quote"):
+def hb_cta(t, heading=None, cta="Request a quote", compact=False):
+    """The conversion band. `compact` is the mid-page form: one line, slimmer, and
+    worded as an interruption rather than a close, so a page carrying two CTAs does not
+    print the same block twice."""
     e = H.esc
+    if compact:
+        heading = heading or f"Door already down? {t['city']} calls get same-day slots first."
+        action = _tel(t, label=f'Call {e(t["phone"])}', cls="hb-cta__btn") or ""
+        return (f'<section class="hb hb--cta hb--cta-slim"><div class="hb-wrap">'
+                f'<div class="hb-cta__row"><p>{e(heading)}</p>'
+                f'<div class="hb-cta__acts">{action}'
+                f'<a class="hb-cta__btn hb-cta__btn--alt" href="/request-a-quote/">{e(cta)}</a>'
+                f'</div></div></div></section>')
     heading = heading or f"Need a garage door fixed in {t['city']}?"
     sub = ("Tell us what it is doing and we will come back with a written price."
            if not H.has_phone(t) else "Call for same-day service on most repairs.")
@@ -1411,6 +1445,7 @@ def hb_stack(t, pages, faqs, pin=(), drop=()):
         "local":    lambda: hb_local(t, pages),
         "segments": lambda: hb_segments(t, pages),
         "guides":   lambda: hb_guides(t, pages),
+        "gallery":  lambda: hb_gallery(t),
         "reviews":  lambda: hb_reviews(t),
     }
     for name in tuple(drop) + tuple(H.recipe(t)["drop"]):
@@ -1421,7 +1456,16 @@ def hb_stack(t, pages, faqs, pin=(), drop=()):
     # rather than printing the same list twice
     out = [] if "services" in drop else [hb_services(t, pages)]
     out += [fn() for _, fn in pinned]
-    out += [fn() for _, fn in middle]
+    # cta axis: where the *extra* conversion band sits. The closing CTA always stays --
+    # it is the page's main conversion path -- so this adds at most one more, and the
+    # extra one uses the slim form. The axis previously emitted a class nothing read.
+    mode = H.recipe(t)["cta"]
+    blocks_mid = [fn() for _, fn in middle]
+    if mode == "mid" and len(blocks_mid) > 3:
+        blocks_mid.insert(len(blocks_mid) // 2, hb_cta(t, compact=True))
+    elif mode == "both" and blocks_mid:
+        blocks_mid.insert(1 if len(blocks_mid) > 1 else 0, hb_cta(t, compact=True))
+    out += blocks_mid
     # The closing anchors are droppable as well: nimbus ends with its own FAQ accordion
     # and CTA panel, ironclad with its own estimate band. Appending the shared ones on
     # top printed the same questions and the same call to action twice.
@@ -1497,10 +1541,21 @@ BLOCK_CSS = """
 .hb-faq summary{cursor:pointer;font-weight:700;font-size:1.05rem}
 .hb-faq p{margin:12px 0 0;opacity:.85;max-width:70ch}
 .hb--cta{text-align:center}
+.hb--cta-slim{padding-top:0;padding-bottom:0;text-align:left}
+.hb--cta-slim .hb-wrap{padding-top:26px;padding-bottom:26px}
+.hb-cta__row{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.hb-cta__row p{margin:0;font-size:1.08rem;font-weight:600;max-width:52ch}
+.hb--cta-slim .hb-cta__acts{justify-content:flex-end;margin:0}
 .hb--cta p{margin:0 0 24px;opacity:.85}
 .hb-cta__acts{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
 .hb-cta__btn{display:inline-block;padding:15px 30px;text-decoration:none;font-weight:700}
 .hb-photo{width:100%;height:auto;display:block}
+.hb-shots{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.hb-shot{margin:0;overflow:hidden}
+.hb-shot img{width:100%;height:220px;object-fit:cover;display:block;transition:transform .5s ease}
+.hb-shot:hover img{transform:scale(1.05)}
+@media(max-width:980px){.hb-shots{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.hb-shots{grid-template-columns:1fr}.hb-shot img{height:200px}}
 /* ported expanded-homepage blocks */
 .hb-syms{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .hb-sym{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;
