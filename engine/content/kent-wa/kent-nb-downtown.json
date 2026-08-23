@@ -1,0 +1,20 @@
+{
+ "title": "Garage Door Service in Downtown - Kent, WA",
+ "meta": "Garage door repair and installation in Downtown, Kent. Same-day service, local techs.",
+ "h1": "Garage Door Service in Downtown",
+ "sections": [
+  {
+   "h2": "serving_the_neighborhood",
+   "body": "We cover Downtown and the rest of Kent for garage door repair, spring and opener service, and new-door installation. Same-day service on most repairs, with a written price before we start."
+  }
+ ],
+ "faq": [
+  {
+   "q": "Do you serve Downtown?",
+   "a": "Yes - Downtown is inside our regular Kent service area."
+  }
+ ],
+ "schema_facts": {
+  "areaServed": "Downtown, Kent, WA"
+ }
+}
