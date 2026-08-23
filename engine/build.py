@@ -938,12 +938,19 @@ VARIANT_CSS = """
 .v-space-airy .hb{padding-top:104px;padding-bottom:104px}
 .v-space-airy .hb h2{margin-bottom:44px}
 /* ---- footer ---- */
-.v-foot-stack .tc-fcols{grid-template-columns:1fr 1fr}
-.v-foot-center .tc-fcols{grid-template-columns:1fr;text-align:center;justify-items:center}
+/* Footer variants change emphasis and alignment -- never the number of link columns.
+   "center" used to be a single column, which on a 1180px footer reads as a phone
+   layout on a desktop screen, and "split" hid every column past the third, silently
+   dropping real navigation (About / Contact / Request a quote) from the page. */
+.v-foot-stack .tc-fcols{grid-template-columns:repeat(4,1fr)}
+.v-foot-stack .tc-fbrand{grid-column:1/-1;margin-bottom:10px}
+.v-foot-stack .tc-fbrand p{max-width:56ch}
+.v-foot-center .tc-fcols{grid-template-columns:repeat(4,1fr);text-align:center;justify-items:center}
+.v-foot-center .tc-fbrand{grid-column:1/-1;margin-bottom:10px}
+.v-foot-center .tc-fbrand .tc-brand{justify-content:center}
 .v-foot-center .tc-fbrand p,.v-foot-center .tc-fbrand address{margin-left:auto;margin-right:auto}
 .v-foot-center .tc-flegal{justify-content:center;text-align:center}
-.v-foot-split .tc-fcols{grid-template-columns:1.4fr 1fr 1fr}
-.v-foot-split .tc-fcol:nth-child(n+4){display:none}
+.v-foot-split .tc-fcols{grid-template-columns:2fr repeat(4,1fr)}
 /* ---- reviews (only rendered when a site has real review data) ---- */
 .hb-revs{display:grid;gap:20px}
 .hb-rev{margin:0;padding:26px}
@@ -959,7 +966,7 @@ VARIANT_CSS = """
 @media(max-width:620px){.hb-rev--row .hb-rev{grid-template-columns:1fr;gap:8px}}
 @media(max-width:980px){
   .v-grid-g4 .hb-svcs,.v-grid-g4 .hb-guides,.v-grid-g4 .hb-doors{grid-template-columns:repeat(2,1fr)}
-  .v-foot-split .tc-fcols{grid-template-columns:1fr 1fr}
+  .v-foot-split .tc-fcols,.v-foot-stack .tc-fcols,.v-foot-center .tc-fcols{grid-template-columns:1fr 1fr}
 }
 @media(max-width:620px){
   .v-grid-g2 .hb-svcs,.v-grid-g2 .hb-guides,.v-grid-g2 .hb-doors,
@@ -1920,9 +1927,6 @@ def actionbar_css(t):
   .abar__btn--quote{background:__ACCENT__;color:__ONACCENT__}
   /* keep the bar from sitting on top of the last of the footer */
   body{padding-bottom:calc(74px + env(safe-area-inset-bottom,0px))}
-}
-@media(max-width:__BP__px) and (prefers-color-scheme:dark){
-  .abar{background:rgba(255,255,255,.97)}
 }
 """
             .replace("__BP__", str(ACTIONBAR_BP))
